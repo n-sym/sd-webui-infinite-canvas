@@ -3,6 +3,47 @@ import base64
 from io import BytesIO
 from PIL import Image, ImageDraw
 
+def distance_based_extend(image: Image.Image, mask: Image.Image) -> Image.Image:
+    import numpy as np
+    from scipy.ndimage import distance_transform_edt
+    
+    img_arr = np.array(image)
+    mask_arr = np.array(mask.convert("L"))
+    binary_mask = (mask_arr > 127).astype(np.uint8)
+    
+    dist, indices = distance_transform_edt(binary_mask, return_indices=True)
+    if np.max(dist) == 0:
+        return image
+        
+    extended_arr = img_arr[indices[0], indices[1], :]
+    return Image.fromarray(extended_arr)
+
+def distance_based_blur_fill(image: Image.Image, mask: Image.Image) -> Image.Image:
+    import cv2
+    import numpy as np
+    
+    img_arr = np.array(image)
+    mask_arr = np.array(mask.convert("L"))
+    binary_mask = (mask_arr > 0).astype(np.uint8) * 255
+    
+    # Expand the mask slightly to overwrite any semi-transparent dark anti-aliasing pixels
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    binary_mask = cv2.dilate(binary_mask, kernel)
+    
+    # Telea's algorithm (Fast Marching Method) seamlessly propagates colors outwards
+    inpainted = cv2.inpaint(img_arr, binary_mask, 3, cv2.INPAINT_TELEA)
+    
+    # Add a strong Gaussian Blur to the padded area to create a perfect isotropic gradient,
+    # eliminating the straight orthogonal streaks produced by Telea.
+    blurred = cv2.GaussianBlur(inpainted, (63, 63), 0)
+    
+    # Composite the original valid pixels back into the center
+    valid_mask = (1 - (binary_mask / 255.0))[..., np.newaxis]
+    final_arr = inpainted * valid_mask + blurred * (binary_mask / 255.0)[..., np.newaxis]
+    final_arr = final_arr.astype(np.uint8)
+    
+    return Image.fromarray(final_arr)
+
 class CanvasState:
     def __init__(self):
         # Initial canvas is 1024x1024 transparent
@@ -85,7 +126,7 @@ class CanvasState:
             
         return pad_left, pad_top
 
-    def prepare_generation(self, source_rect, target_rect, generation_res=1024, upscaler_name="None", mask_base64="", auto_scale=True):
+    def prepare_generation(self, source_rect, target_rect, generation_res=1024, upscaler_name="None", mask_base64="", auto_scale=True, outpaint_pad="全黑 (Black)"):
         """
         1. Calculates scaling needed so target_rect max dimension matches generation_res.
         2. Upscales canvas if scale > 1 (up to max_size) and auto_scale is True. Does NOT downscale.
@@ -166,6 +207,32 @@ class CanvasState:
             source_crop = large_rotated.crop((center_x - sw//2, center_y - sh//2, center_x + sw//2, center_y + sh//2))
         else:
             source_crop = self.image.crop((sx, sy, sx+sw, sy+sh))
+            
+        # 3.5 Apply Edge Padding before resize (since resize drops alpha)
+        alpha = None
+        if source_crop.mode == 'RGBA':
+            alpha = source_crop.split()[3]
+            from PIL import ImageOps, ImageChops
+            inverted_alpha = ImageOps.invert(alpha)
+            
+            bg_color = (0, 0, 0, 255)
+            if "White" in outpaint_pad:
+                bg_color = (255, 255, 255, 255)
+                
+            if "Extend Edge" in outpaint_pad or "Edge Blur" in outpaint_pad:
+                # DO NOT blend with a black background here! Doing so darkens the anti-aliased edge
+                # pixels, causing cv2.inpaint to stretch a dark shadow outwards.
+                # Simply converting to RGB drops the alpha, preserving the true RGB color of the edge!
+                source_rgb = source_crop.convert("RGB")
+                
+                if "Edge Blur" in outpaint_pad:
+                    source_crop = distance_based_blur_fill(source_rgb, inverted_alpha)
+                else:
+                    source_crop = distance_based_extend(source_rgb, inverted_alpha)
+            else:
+                background = Image.new("RGBA", source_crop.size, bg_color)
+                background.paste(source_crop, mask=alpha)
+                source_crop = background.convert("RGB")
         
         # 4. We must resize source_crop so the model processes it such that Target is generation_res.
         # This is important if requested_scale was clamped by max_size, or if requested_scale < 1.0.
@@ -179,6 +246,12 @@ class CanvasState:
         if model_scale != 1.0:
             from modules import images
             source_ready = images.resize_image(0, source_crop, final_sw, final_sh, upscaler_name=upscaler_name)
+            
+        # Also resize inverted_alpha to match final size
+        if alpha is not None and model_scale != 1.0:
+            inverted_alpha_resized = inverted_alpha.resize((final_sw, final_sh), Image.LANCZOS)
+        elif alpha is not None:
+            inverted_alpha_resized = inverted_alpha
             
         # 5. Create Mask
         tx_rel = target_rect['x'] - source_rect['x']
@@ -202,24 +275,37 @@ class CanvasState:
         else:
             draw = ImageDraw.Draw(mask)
             draw.rectangle([mtx, mty, mtx+mtw, mty+mth], fill="white")
-        
-        # Add transparent areas to mask and flatten source to RGB
-        if source_ready.mode == 'RGBA':
-            alpha = source_ready.split()[3]
-            from PIL import ImageOps, ImageChops
-            inverted_alpha = ImageOps.invert(alpha)
-            mask = ImageChops.lighter(mask, inverted_alpha)
             
-            # Flatten to RGB with 50% gray background
-            background = Image.new("RGBA", source_ready.size, (128, 128, 128, 255))
-            background.paste(source_ready, mask=alpha)
-            source_ready = background.convert("RGB")
+        sd_mask = mask.copy()
+            
+        # Add transparent areas to paste_mask so it gets pasted back to the canvas,
+        # but DO NOT add it to sd_mask, so SD doesn't generate over unmasked edge blur!
+        from PIL import ImageChops, ImageOps
+        if alpha is not None:
+            # Binarize and dilate inverted_alpha so that the paste mask fully overwrites
+            # the semi-transparent anti-aliased edge seam on the canvas, eliminating the dark border line.
+            import numpy as np
+            import cv2
+            ia_arr = np.array(inverted_alpha_resized)
+            ia_arr = (ia_arr > 0).astype(np.uint8) * 255
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            ia_arr = cv2.dilate(ia_arr, kernel)
+            solid_inverted_alpha = Image.fromarray(ia_arr)
+            
+            paste_mask = ImageChops.lighter(mask, solid_inverted_alpha)
+        elif source_ready.mode == 'RGBA':
+            # Fallback if somehow it's RGBA but we didn't process it earlier
+            alpha2 = source_ready.split()[3]
+            paste_mask = ImageChops.lighter(mask, ImageOps.invert(alpha2))
+            source_ready = source_ready.convert("RGB")
         else:
+            paste_mask = mask
             source_ready = source_ready.convert("RGB")
             
         return {
             'image': source_ready,
-            'mask': mask,
+            'mask': sd_mask,
+            'paste_mask': paste_mask,
             'canvas_source_rect': source_rect,
             'model_scale': model_scale,
             'transform': {

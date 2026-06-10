@@ -61,7 +61,12 @@ function t(enStr) {
         'Draw Mask Desc 2': '当你旋转蓝框后，你的画笔和矩形框仍会保持与屏幕水平，底层会自动帮你逆向映射！',
         '🔄 Undo/Redo & Generation': '🔄 撤销重做与生成',
         'Undo Desc 1': '生成完成后，会弹出预览确认框，你可以在应用前调整边缘羽化。',
-        'Undo Desc 2': '你可以随时使用工具栏的 <strong>撤销 / 重做</strong> 按钮来回退你的操作。'
+        'Undo Desc 2': '你可以随时使用工具栏的 <strong>撤销 / 重做</strong> 按钮来回退你的操作。',
+        'Edge Padding': '边缘扩展选项',
+        'Black': '全黑',
+        'White': '全白',
+        'Extend Edge': '扩展边缘',
+        'Edge Blur': '边缘模糊'
     };
     return dict[enStr] || enStr;
 }
@@ -71,7 +76,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     function translateGradio() {
         if (!isZh) return;
-        const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name'];
+        const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {

@@ -88,7 +88,7 @@ class ICLatentBlendScript(scripts.Script):
         mba.blended_latent = image_interp
 
 
-def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, upscaler_name, auto_scale, downscale_algo, edge_fix, edge_fix_power, latent_blend, latent_blend_power):
+def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo, edge_fix, edge_fix_power, latent_blend, latent_blend_power):
     edge_fix_power = float(edge_fix_power) if edge_fix_power is not None else 1.0
     latent_blend_power = float(latent_blend_power) if latent_blend_power is not None else 1.0
     global sam2_model
@@ -114,17 +114,19 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
         gen_width = int(gen_width) if gen_width is not None else 1024
         gen_height = int(gen_height) if gen_height is not None else 1024
         inpainting_fill_idx = int(inpainting_fill_idx) if inpainting_fill_idx is not None else 1
+        outpaint_pad = str(outpaint_pad) if outpaint_pad is not None else "全黑 (Black)"
         auto_scale = bool(auto_scale)
         edge_fix = bool(edge_fix)
         
         # Prepare the canvas
         generation_res = max(gen_width, gen_height)
-        prep_info = canvas_state.prepare_generation(source_rect, target_rect, generation_res=generation_res, upscaler_name=upscaler_name, mask_base64=mask_base64, auto_scale=auto_scale)
+        prep_info = canvas_state.prepare_generation(source_rect, target_rect, generation_res=generation_res, upscaler_name=upscaler_name, mask_base64=mask_base64, auto_scale=auto_scale, outpaint_pad=outpaint_pad)
         if not prep_info:
             return json.dumps({"image": canvas_state.get_base64()}), ""
             
         init_image = prep_info['image']
         mask = prep_info['mask']
+        paste_mask = prep_info.get('paste_mask', mask)
         canvas_source_rect = prep_info['canvas_source_rect']
         
         # Call processing
@@ -194,11 +196,12 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
         
         processed = processing.process_images(p)
         
-        paste_mask = mask
         if processed.images:
             result_img = processed.images[0]
+            original_paste_mask_arr = np.array(paste_mask.convert("L"))
+            
             if latent_blend and not edge_fix:
-                paste_mask_arr = cv2.max(mask_gen_size_arr, symmetric_soft_mask_arr)
+                paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_arr)
                 paste_mask_arr[paste_mask_arr > 0] = 255
                 paste_mask = Image.fromarray(paste_mask_arr)
 
@@ -283,7 +286,7 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
                         final_blended_arr = base_arr * (1.0 - alpha) + new_arr * alpha
                         result_img = Image.fromarray(final_blended_arr.astype(np.uint8))
                 
-                paste_mask_arr = cv2.max(mask_gen_size_arr, cv2.max(actual_mask_arr, hard_edge_mask_arr))
+                paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_arr, hard_edge_mask_arr))
                 paste_mask_arr[paste_mask_arr > 0] = 255
                 paste_mask = Image.fromarray(paste_mask_arr)
             
@@ -519,6 +522,7 @@ def on_ui_tabs():
                         
                     with gr.Row():
                         inpainting_fill = gr.Radio(label="Masked content", choices=["fill", "original", "latent noise", "latent nothing"], value="original", type="index")
+                        ic_outpaint_pad = gr.Radio(label="Edge Padding", choices=["Black", "White", "Extend Edge", "Edge Blur"], value="Black", elem_id="ic_outpaint_pad")
                         
                     from modules import shared
                     upscaler_name_input = gr.Dropdown(label="Upscaler (for resizing source)", choices=[x.name for x in shared.sd_upscalers], value="None")
@@ -578,7 +582,7 @@ def on_ui_tabs():
                 trigger_btn.click(
                     fn=wrap_gradio_gpu_call(api_generate, extra_outputs=[gr.update(), gr.update(), ""]),
                     _js="function(){ var args = Array.from(arguments); args[0] = window.ic_current_task_id || 'ic_task'; return args; }",
-                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, upscaler_name_input, ic_auto_scale, downscale_algo_input, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
+                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
                     outputs=[payload_output, prev_btn, now_btn, html_info],
                 )
                 
@@ -649,7 +653,7 @@ def on_ui_tabs():
                     outputs=[payload_output]
                 )
                 
-                def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_up, p_down, p_name, p_auto_scale, p_edge_fix, p_edge_fix_power, p_latent_blend, p_latent_blend_power):
+                def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale, p_edge_fix, p_edge_fix_power, p_latent_blend, p_latent_blend_power):
                     import json, zipfile, os, base64, re
                     from io import BytesIO
                     from PIL import Image
@@ -671,6 +675,7 @@ def on_ui_tabs():
                         "gen_height": p_h,
                         "seed": p_seed,
                         "inpainting_fill": p_fill,
+                        "outpaint_pad": p_outpaint_pad,
                         "upscaler_name_input": p_up,
                         "downscale_algo_input": p_down,
                         "auto_scale": p_auto_scale,
@@ -741,7 +746,7 @@ def on_ui_tabs():
                     from PIL import Image
                     file_info = args[0] if args else None
                     if file_info is None:
-                        return [gr.skip()] * 24
+                        return [gr.skip()] * 25
                     try:
                         import os
                         filepath = file_info.name if hasattr(file_info, "name") else file_info
@@ -811,7 +816,8 @@ def on_ui_tabs():
                             meta.get("gen_width", gr.skip()),
                             meta.get("gen_height", gr.skip()),
                             meta.get("seed", gr.skip()),
-                            ["fill", "original", "latent noise", "latent nothing"][int(meta.get("inpainting_fill"))] if meta.get("inpainting_fill") is not None and isinstance(meta.get("inpainting_fill"), (int, float)) else meta.get("inpainting_fill", gr.skip()),
+                            meta.get("inpainting_fill", 1),
+                            meta.get("outpaint_pad", "Black"),
                             meta.get("upscaler_name_input", gr.skip()),
                             meta.get("downscale_algo_input", gr.skip()),
                             meta.get("auto_scale", gr.skip()),
@@ -824,21 +830,21 @@ def on_ui_tabs():
                         ]
                     except Exception as e:
                         print(f"Error loading project: {e}")
-                        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*21 + [gr.update(value=None), gr.skip()]
+                        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*22 + [gr.update(value=None), gr.skip()]
 
                 # Hidden button to trigger python save
                 ic_save_project_hidden_btn = gr.Button("Save Project Hidden", elem_id="ic_save_project_hidden_btn", visible=False)
                 
                 ic_save_project_hidden_btn.click(
                     fn=api_save_project,
-                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, upscaler_name_input, downscale_algo_input, ic_project_name, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
+                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
                     outputs=[ic_download_file]
                 )
                 
                 ic_upload_file.change(
                     fn=api_load_project,
                     inputs=[ic_upload_file],
-                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, upscaler_name_input, downscale_algo_input, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power, ic_upload_file, ic_project_name]
+                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power, ic_upload_file, ic_project_name]
                 )
                 
                 def api_sam_predict(payload_json):
