@@ -10,25 +10,28 @@
         maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
         maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
         targetRect = {x: 0, y: 0, w: 0, h: 0};
+        // Save cleared state so the clear itself is undoable
+        saveMaskState();
     }
 
     function resizeSourceRect(newW, newH) {
-        const oldW = maskDataCanvas.width;
-        const oldH = maskDataCanvas.height;
+        const oldX = sourceRect.x;
+        const oldY = sourceRect.y;
         
         // Save current mask to temp
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.max(oldW, 1);
-        tempCanvas.height = Math.max(oldH, 1);
+        tempCanvas.width = Math.max(maskDataCanvas.width, 1);
+        tempCanvas.height = Math.max(maskDataCanvas.height, 1);
         tempCanvas.getContext('2d').drawImage(maskDataCanvas, 0, 0);
         
         const cx = sourceRect.x + sourceRect.w / 2;
         const cy = sourceRect.y + sourceRect.h / 2;
         
-        sourceRect.w = newW;
-        sourceRect.h = newH;
-        sourceRect.x = cx - sourceRect.w / 2;
-        sourceRect.y = cy - sourceRect.h / 2;
+        // Ensure new dimensions and positions are rounded to integers to avoid drift
+        sourceRect.w = Math.round(newW);
+        sourceRect.h = Math.round(newH);
+        sourceRect.x = Math.round(cx - sourceRect.w / 2);
+        sourceRect.y = Math.round(cy - sourceRect.h / 2);
         
         // Resize actual mask canvas
         maskDataCanvas.width = Math.max(sourceRect.w, 1);
@@ -36,13 +39,16 @@
         maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
         maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
         
-        // Draw old mask back in the center to keep it aligned with the canvas background
-        const offsetX = (maskDataCanvas.width - oldW) / 2;
-        const offsetY = (maskDataCanvas.height - oldH) / 2;
+        // Draw old mask exactly relative to the new integer world coordinates
+        const offsetX = oldX - sourceRect.x;
+        const offsetY = oldY - sourceRect.y;
         maskDataCtx.drawImage(tempCanvas, offsetX, offsetY);
         
         // targetRect doesn't need to be strictly cleared, but we'll let api re-calculate it on next gen
         targetRect = {x: 0, y: 0, w: 0, h: 0};
+
+        // Save state after resize so it's undoable as one step
+        saveMaskState();
     }
     
     const clearMaskBtn = document.getElementById('ic_clear_mask');
@@ -57,6 +63,74 @@
         });
     }
     
+    function saveMaskState() {
+        // Trim any "future" states if we're mid-history (user drew after undo)
+        if (maskHistoryIndex < maskHistory.length - 1) {
+            maskHistory = maskHistory.slice(0, maskHistoryIndex + 1);
+        }
+        const imageData = maskDataCtx.getImageData(0, 0, maskDataCanvas.width, maskDataCanvas.height);
+        // Store mask content alongside sourceRect dimensions so resize is undoable
+        maskHistory.push({ imageData, rectW: sourceRect.w, rectH: sourceRect.h });
+        // Enforce limit — drop oldest
+        if (maskHistory.length > MASK_HISTORY_LIMIT) {
+            maskHistory.shift();
+        }
+        maskHistoryIndex = maskHistory.length - 1;
+        updateMaskUndoRedoButtons();
+    }
+
+    function restoreMaskState(entry) {
+        // Restore sourceRect dimensions, keeping current center position
+        // (dragging/rotating are NOT undoable, only dimensions matter)
+        const cx = sourceRect.x + sourceRect.w / 2;
+        const cy = sourceRect.y + sourceRect.h / 2;
+        sourceRect.w = entry.rectW;
+        sourceRect.h = entry.rectH;
+        sourceRect.x = cx - sourceRect.w / 2;
+        sourceRect.y = cy - sourceRect.h / 2;
+
+        // Restore mask canvas content at the historical dimensions
+        maskDataCanvas.width = Math.max(entry.rectW, 1);
+        maskDataCanvas.height = Math.max(entry.rectH, 1);
+        maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
+        maskDataCtx.putImageData(entry.imageData, 0, 0);
+
+        updateMaskUndoRedoButtons();
+        draw();
+    }
+
+    function undoMask() {
+        if (maskHistoryIndex <= 0) return;
+        maskHistoryIndex--;
+        restoreMaskState(maskHistory[maskHistoryIndex]);
+    }
+
+    function redoMask() {
+        if (maskHistoryIndex >= maskHistory.length - 1) return;
+        maskHistoryIndex++;
+        restoreMaskState(maskHistory[maskHistoryIndex]);
+    }
+
+    function updateMaskUndoRedoButtons() {
+        const undoBtn = document.getElementById('ic_float_mask_undo');
+        const redoBtn = document.getElementById('ic_float_mask_redo');
+        if (undoBtn) {
+            if (maskHistoryIndex > 0) undoBtn.classList.remove('disabled-state');
+            else undoBtn.classList.add('disabled-state');
+        }
+        if (redoBtn) {
+            if (maskHistoryIndex < maskHistory.length - 1) redoBtn.classList.remove('disabled-state');
+            else redoBtn.classList.add('disabled-state');
+        }
+    }
+
+    function resetMaskHistory() {
+        maskHistory = [];
+        maskHistoryIndex = -1;
+        // Save current state as the new baseline
+        saveMaskState();
+    }
+
     function rotatePoint(px, py, cx, cy, angle) {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);

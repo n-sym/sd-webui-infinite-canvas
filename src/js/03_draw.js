@@ -70,6 +70,20 @@
             ctx.lineWidth = 2 / scale;
             ctx.setLineDash([5 / scale, 5 / scale]);
             ctx.strokeRect(-sourceRect.w / 2, -sourceRect.h / 2, sourceRect.w, sourceRect.h);
+            
+            if (isRotatingSource) {
+                // Draw an arrow indicating the "forward/right" direction (X-axis positive)
+                ctx.setLineDash([]); // solid line for arrow
+                ctx.lineWidth = 3 / scale;
+                ctx.beginPath();
+                ctx.moveTo(sourceRect.w / 2, 0);
+                ctx.lineTo(sourceRect.w / 2 + 25 / scale, 0);
+                ctx.lineTo(sourceRect.w / 2 + 15 / scale, -10 / scale);
+                ctx.moveTo(sourceRect.w / 2 + 25 / scale, 0);
+                ctx.lineTo(sourceRect.w / 2 + 15 / scale, 10 / scale);
+                ctx.stroke();
+            }
+            
             ctx.restore();
         }
         

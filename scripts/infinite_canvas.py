@@ -384,8 +384,8 @@ def on_ui_tabs():
                 gr.HTML(value='<div id="ic-container" style="width:100%; height:80vh; min-height:600px; max-height:1200px; border:1px solid #ccc; position:relative; overflow:hidden; background:#333; cursor:crosshair;"><canvas id="ic-canvas"></canvas></div>')
                 
                 with gr.Row(elem_id="ic_toolbar_1", equal_height=False, visible=False):
-                    prev_btn = gr.Button("⏪ Undo", elem_id="ic_prev_btn", interactive=False, size="sm", scale=0)
-                    now_btn = gr.Button("Redo ⏩", elem_id="ic_now_btn", interactive=False, size="sm", scale=0)
+                    prev_btn = gr.Button("Canvas ⏪", elem_id="ic_prev_btn", interactive=False, size="sm", scale=0)
+                    now_btn = gr.Button("Canvas ⏩", elem_id="ic_now_btn", interactive=False, size="sm", scale=0)
                     ic_tool_rect = gr.Button("Rect", elem_id="ic_tool_rect", size="sm", min_width=80, scale=0, variant="primary")
                     ic_tool_brush = gr.Button("Brush", elem_id="ic_tool_brush", size="sm", min_width=80, scale=0, variant="secondary")
                     ic_tool_ellipse = gr.Button("Ellipse", elem_id="ic_tool_ellipse", size="sm", min_width=80, scale=0, variant="secondary")
@@ -682,21 +682,48 @@ def on_ui_tabs():
                     
                     zip_buffer = BytesIO()
                     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                        zip_file.writestr("meta.json", json.dumps(meta))
+                        import concurrent.futures
                         
-                        def add_image_to_zip(img, filename):
+                        image_sizes = {}
+                        futures = []
+                        executor = concurrent.futures.ThreadPoolExecutor()
+                        
+                        def add_image_tiles(img, base_name):
                             if img:
-                                img_io = BytesIO()
-                                img.save(img_io, format="PNG")
-                                zip_file.writestr(filename, img_io.getvalue())
-                                
-                        add_image_to_zip(canvas_state.image, "canvas.png")
-                        add_image_to_zip(canvas_state.image_prev, "canvas_prev.png")
-                        add_image_to_zip(canvas_state.image_now, "canvas_now.png")
+                                img.load() # ensure the image is fully loaded before multithreading
+                                image_sizes[base_name] = img.size
+                                w, h = img.size
+                                tile_size = 1024
+                                for y in range(0, h, tile_size):
+                                    for x in range(0, w, tile_size):
+                                        box = (x, y, min(x + tile_size, w), min(y + tile_size, h))
+                                        def process_tile(crop_box=box):
+                                            tile = img.crop(crop_box)
+                                            img_io = BytesIO()
+                                            tile.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
+                                            return (f"{base_name}_t_{crop_box[0]}_{crop_box[1]}.webp", img_io.getvalue())
+                                        futures.append(executor.submit(process_tile))
+
+                        add_image_tiles(canvas_state.image, "canvas")
+                        add_image_tiles(canvas_state.image_prev, "canvas_prev")
+                        add_image_tiles(canvas_state.image_now, "canvas_now")
                         
                         if mask_b64 and "," in mask_b64:
-                            mask_data = base64.b64decode(mask_b64.split(",")[1])
-                            zip_file.writestr("mask.png", mask_data)
+                            try:
+                                m_img = Image.open(BytesIO(base64.b64decode(mask_b64.split(",")[1])))
+                                add_image_tiles(m_img, "mask")
+                            except Exception:
+                                pass
+                                
+                        meta["image_sizes"] = image_sizes
+                        zip_file.writestr("meta.json", json.dumps(meta))
+                        
+                        for future in concurrent.futures.as_completed(futures):
+                            result = future.result()
+                            if result:
+                                zip_file.writestr(result[0], result[1])
+                                
+                        executor.shutdown(wait=True)
                             
                     tmp_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'tmp')
                     os.makedirs(tmp_dir, exist_ok=True)
@@ -723,24 +750,43 @@ def on_ui_tabs():
                         meta = {}
                         mask_b64 = ""
                         with zipfile.ZipFile(filepath, 'r') as zip_ref:
-                            if "canvas.png" in zip_ref.namelist():
-                                canvas_data = zip_ref.read("canvas.png")
-                                canvas_state.image = Image.open(BytesIO(canvas_data)).convert("RGB")
-                            if "canvas_prev.png" in zip_ref.namelist():
-                                prev_data = zip_ref.read("canvas_prev.png")
-                                canvas_state.image_prev = Image.open(BytesIO(prev_data)).convert("RGB")
-                            else:
-                                canvas_state.image_prev = None
-                            if "canvas_now.png" in zip_ref.namelist():
-                                now_data = zip_ref.read("canvas_now.png")
-                                canvas_state.image_now = Image.open(BytesIO(now_data)).convert("RGB")
-                            else:
-                                canvas_state.image_now = None
                             if "meta.json" in zip_ref.namelist():
                                 meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
-                            if "mask.png" in zip_ref.namelist():
-                                mask_data = zip_ref.read("mask.png")
-                                mask_b64 = "data:image/png;base64," + base64.b64encode(mask_data).decode('utf-8')
+
+                            def load_img(base_name, is_mask=False):
+                                mode = "RGBA" if is_mask else "RGB"
+                                # 1. Try loading from tiles if available
+                                if meta.get("image_sizes") and base_name in meta["image_sizes"] and meta["image_sizes"][base_name]:
+                                    size = meta["image_sizes"][base_name]
+                                    tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
+                                    if tile_names:
+                                        img = Image.new(mode, tuple(size))
+                                        for name in tile_names:
+                                            parts = name.replace(".webp", "").split("_")
+                                            x, y = int(parts[-2]), int(parts[-1])
+                                            tile_data = zip_ref.read(name)
+                                            tile_img = Image.open(BytesIO(tile_data))
+                                            if tile_img.mode != mode:
+                                                tile_img = tile_img.convert(mode)
+                                            img.paste(tile_img, (x, y))
+                                        return img
+                                        
+                                # 2. Fallback to single WEBP or PNG file
+                                if f"{base_name}.webp" in zip_ref.namelist():
+                                    return Image.open(BytesIO(zip_ref.read(f"{base_name}.webp"))).convert(mode)
+                                elif f"{base_name}.png" in zip_ref.namelist():
+                                    return Image.open(BytesIO(zip_ref.read(f"{base_name}.png"))).convert(mode)
+                                return None
+
+                            canvas_state.image = load_img("canvas")
+                            canvas_state.image_prev = load_img("canvas_prev")
+                            canvas_state.image_now = load_img("canvas_now")
+                                
+                            m_img = load_img("mask", is_mask=True)
+                            if m_img:
+                                m_io = BytesIO()
+                                m_img.save(m_io, format="WEBP", lossless=True, quality=100, method=0)
+                                mask_b64 = "data:image/webp;base64," + base64.b64encode(m_io.getvalue()).decode('utf-8')
                         
                         payload = json.dumps({
                             "type": "project_load",

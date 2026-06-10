@@ -173,6 +173,10 @@
                 angle = Math.PI;
             } else if (Math.abs(angle + Math.PI) < 0.05) {
                 angle = -Math.PI;
+            } else if (Math.abs(angle - Math.PI / 2) < 0.05) {
+                angle = Math.PI / 2;
+            } else if (Math.abs(angle + Math.PI / 2) < 0.05) {
+                angle = -Math.PI / 2;
             }
             sourceRect.angle = angle;
             draw();
@@ -214,21 +218,23 @@
         isDraggingCanvas = false;
         isDraggingSource = false;
         isRotatingSource = false;
-        
+
+        let didDrawMask = false;
+
         if (isDrawingRect || isDrawingEllipse) {
             if (currentStroke) {
                 maskDataCtx.globalCompositeOperation = 'source-over';
                 maskDataCtx.fillStyle = 'white';
-                
+
                 maskDataCtx.save();
                 const mcx = sourceRect.w / 2;
                 const mcy = sourceRect.h / 2;
                 maskDataCtx.translate(mcx, mcy);
                 maskDataCtx.rotate(-(sourceRect.angle || 0));
-                
+
                 const wcx = sourceRect.x + sourceRect.w / 2;
                 const wcy = sourceRect.y + sourceRect.h / 2;
-                
+
                 if (currentStroke.type === 'rect') {
                     const offsetX = currentStroke.x - wcx;
                     const offsetY = currentStroke.y - wcy;
@@ -238,22 +244,30 @@
                     const offsetX = currentStroke.x - wcx + currentStroke.w / 2;
                     const offsetY = currentStroke.y - wcy + currentStroke.h / 2;
                     maskDataCtx.ellipse(
-                        offsetX, offsetY, 
-                        Math.abs(currentStroke.w/2), 
-                        Math.abs(currentStroke.h/2), 
+                        offsetX, offsetY,
+                        Math.abs(currentStroke.w/2),
+                        Math.abs(currentStroke.h/2),
                         0, 0, 2 * Math.PI
                     );
                     maskDataCtx.fill();
                 }
-                
+
                 maskDataCtx.restore();
+                didDrawMask = true;
             }
             isDrawingRect = false;
             isDrawingEllipse = false;
         } else if (isDrawingBrush) {
             isDrawingBrush = false;
+            didDrawMask = true;
         }
         currentStroke = null;
+
+        // Save mask state after each completed stroke for undo
+        if (didDrawMask) {
+            saveMaskState();
+        }
+
         draw();
     });
     

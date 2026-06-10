@@ -290,9 +290,10 @@
                 offsetY = cy - newCenterWorldY * scale;
                 
                 clearMask();
+                // After apply with transform the canvas context has changed entirely;
+                // old mask history references stale dimensions, so reset it
+                resetMaskHistory();
             }
-            
-            pendingUpdate = null;
             pendingPatchImage.src = '';
             pendingMaskImage.src = '';
             pendingEdgeMaskImage.src = '';
@@ -404,11 +405,12 @@
                                 maskDataCanvas.height = img.height;
                                 maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
                                 maskDataCtx.drawImage(img, 0, 0);
+                                resetMaskHistory(); // Reset history after project load
                                 draw();
                             };
                             img.src = data.mask;
                         } else {
-                            clearMask();
+                            clearMask(); // clearMask already calls saveMaskState
                         }
 
                         draw();
@@ -422,6 +424,7 @@
                             img.onload = () => {
                                 maskDataCtx.globalCompositeOperation = 'source-over';
                                 maskDataCtx.drawImage(img, 0, 0);
+                                saveMaskState(); // Save after Magic Wand stroke for undo
                                 draw();
                                 document.body.style.cursor = 'default';
                                 canvas.style.cursor = 'crosshair';

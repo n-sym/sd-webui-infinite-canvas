@@ -128,8 +128,13 @@ const canvas = document.getElementById('ic-canvas');
     ">
         <!-- Top Row: Tools & Undo/Redo & Toggles -->
         <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;">
-            <button id="ic_float_undo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('⏪ Undo')}</button>
-            <button id="ic_float_redo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Redo ⏩')}</button>
+            <button id="ic_float_undo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas ⏪')}</button>
+            <button id="ic_float_redo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas ⏩')}</button>
+
+            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
+
+            <button id="ic_float_mask_undo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask ⏪')}</button>
+            <button id="ic_float_mask_redo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask ⏩')}</button>
             
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
             
@@ -337,6 +342,24 @@ const canvas = document.getElementById('ic-canvas');
         // Undo / Redo
         document.getElementById('ic_float_undo')?.addEventListener('click', () => document.getElementById('ic_prev_btn')?.click());
         document.getElementById('ic_float_redo')?.addEventListener('click', () => document.getElementById('ic_now_btn')?.click());
+
+        // Mask Undo / Redo
+        document.getElementById('ic_float_mask_undo')?.addEventListener('click', undoMask);
+        document.getElementById('ic_float_mask_redo')?.addEventListener('click', redoMask);
+
+        // Keyboard shortcuts for mask undo/redo: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+        document.addEventListener('keydown', (e) => {
+            // Only handle when the canvas container is visible and no modal/input is focused
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+            if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+                e.preventDefault();
+                undoMask();
+            } else if ((e.ctrlKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) || (e.ctrlKey && e.key === 'y')) {
+                e.preventDefault();
+                redoMask();
+            }
+        });
         
         // Sync disabled state
         function syncDisabledState(sourceId, targetId) {
@@ -499,7 +522,12 @@ const canvas = document.getElementById('ic-canvas');
     maskDataCanvas.width = sourceRect.w;
     maskDataCanvas.height = sourceRect.h;
     let maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
-    
+
+    // Mask undo/redo history (snapshot on each mouseup after a stroke)
+    let maskHistory = [];
+    let maskHistoryIndex = -1;
+    const MASK_HISTORY_LIMIT = 30;
+
     // Cached tint canvas for visualization
     let tintCanvas = document.createElement('canvas');
     let tintCtx = tintCanvas.getContext('2d');
@@ -507,6 +535,9 @@ const canvas = document.getElementById('ic-canvas');
     let currentStroke = null;
 
     window.ic_current_tool = 'Rect';
+
+    // Save initial blank mask state as undo baseline
+    setTimeout(() => { saveMaskState(); }, 0);
 
     // UI State Getters
     window.ic_show_overlay_state = true;

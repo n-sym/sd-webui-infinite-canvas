@@ -1,6 +1,6 @@
 # SD WebUI Infinite Canvas
 
-一个无限画布插件，适用于[Webui Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)。
+一个无限画布插件，适用于[WebUI Forge - Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo)。
 
 ## 特性
 - 自动扩展和放大画布
@@ -23,3 +23,5 @@
 
 ## 说明
 本项目99.9%为 Vibe Coding。我进行了编写README、gitignore的工作。
+
+插件本身是图生图的扩展，假如图生图可以工作，那插件就有可能工作。
