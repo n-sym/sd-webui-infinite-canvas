@@ -36,8 +36,14 @@
         const overlayCb = document.querySelector('#ic_show_overlay input[type="checkbox"]');
         if (overlayCb) overlayCb.addEventListener('change', () => draw());
     }, 1000);
-    
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    const floatingToolbar = document.getElementById('ic-floating-toolbar');
+    if (floatingToolbar) {
+        floatingToolbar.addEventListener('mouseenter', () => {
+            canvas.dispatchEvent(new MouseEvent('mouseup'));
+        });
+    }
     
     canvas.addEventListener('mousedown', (e) => {
         if (e.button === 1 || e.button === 2) e.preventDefault();

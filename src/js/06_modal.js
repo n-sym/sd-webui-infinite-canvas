@@ -95,6 +95,8 @@
                 
                 const dpr = window.devicePixelRatio || 1;
                 const rect = modalCanvas.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return; // Prevent collapse when tab is hidden
+                
                 const targetW = Math.round(rect.width * dpr);
                 const targetH = Math.round(rect.height * dpr);
                 if(modalCanvas.width !== targetW || modalCanvas.height !== targetH) {
@@ -222,6 +224,7 @@
                 modalLastX = e.clientX;
                 modalLastY = e.clientY;
             });
+            mc.addEventListener('contextmenu', (e) => e.preventDefault());
             mc.addEventListener('wheel', (e) => {
                 if(!modalVisible) return;
                 e.preventDefault();
