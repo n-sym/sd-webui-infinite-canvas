@@ -1,0 +1,6 @@
+javascript/
+tmp/
+models/
+*.pyc
+GEMINI.md
+CLAUDE.md
