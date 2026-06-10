@@ -201,7 +201,8 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
             original_paste_mask_arr = np.array(paste_mask.convert("L"))
             
             if latent_blend and not edge_fix:
-                paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_arr)
+                symmetric_soft_mask_resized = cv2.resize(symmetric_soft_mask_arr, paste_mask.size, interpolation=cv2.INTER_LINEAR)
+                paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_resized)
                 paste_mask_arr[paste_mask_arr > 0] = 255
                 paste_mask = Image.fromarray(paste_mask_arr)
 
@@ -286,7 +287,9 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
                         final_blended_arr = base_arr * (1.0 - alpha) + new_arr * alpha
                         result_img = Image.fromarray(final_blended_arr.astype(np.uint8))
                 
-                paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_arr, hard_edge_mask_arr))
+                actual_mask_resized = cv2.resize(actual_mask_arr, paste_mask.size, interpolation=cv2.INTER_NEAREST)
+                hard_edge_mask_resized = cv2.resize(hard_edge_mask_arr, paste_mask.size, interpolation=cv2.INTER_LINEAR)
+                paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_resized, hard_edge_mask_resized))
                 paste_mask_arr[paste_mask_arr > 0] = 255
                 paste_mask = Image.fromarray(paste_mask_arr)
             
