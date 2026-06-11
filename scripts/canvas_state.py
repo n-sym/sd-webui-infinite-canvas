@@ -280,6 +280,8 @@ class CanvasState:
         target_max = max(target_rect['w'], target_rect['h'])
         requested_scale = generation_res / target_max if target_max > 0 else 1.0
         
+        self._ensure_bounds_cover_tiles()
+        
         actual_canvas_scale = 1.0
         if requested_scale > 1.0 and auto_scale:
             current_max_dim = max(self.canvas_bounds['w'], self.canvas_bounds['h'])

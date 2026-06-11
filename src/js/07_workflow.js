@@ -1,8 +1,29 @@
 // 07_workflow.js
 
-// 07_workflow.js
-
-// 07_workflow.js
+const workflowStyle = document.createElement('style');
+workflowStyle.textContent = `
+    .ic-pipeline-node {
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        /* Default to Light Mode (Cute Pastel) */
+        background-color: hsl(var(--node-hue), 85%, 92%);
+        color: hsl(var(--node-hue), 85%, 25%);
+        border: 1px solid hsla(var(--node-hue), 85%, 75%, 0.8);
+        box-shadow: inset 0 0 5px rgba(255,255,255,0.5), 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    /* Dark Mode */
+    .dark .ic-pipeline-node {
+        background-color: hsl(var(--node-hue), 45%, 22%);
+        color: #f0f0f0;
+        border: 1px solid hsla(var(--node-hue), 45%, 40%, 0.5);
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+    }
+`;
+document.head.appendChild(workflowStyle);
 
 let lastQueryPayload = "";
 
@@ -52,16 +73,15 @@ function updateWorkflowUI(data, container) {
     registry.forEach(node => {
         // Calculate a color hue based on sort_index
         const hue = node.sort_index % 360;
-        const bgColor = `hsl(${hue}, 45%, 22%)`;
         
         if (!node.is_plugin) {
             // Core node
-            html += createNodeHtml(t(node.name), bgColor);
+            html += createNodeHtml(t(node.name), hue);
         } else {
             // Plugin node
             const pValues = stepParams[node.id] || {};
             if (pValues.enabled) {
-                html += createNodeHtml(t(node.name), bgColor);
+                html += createNodeHtml(t(node.name), hue);
             }
         }
     });
@@ -172,9 +192,8 @@ window.sendWorkflowUpdate = function() {
     }
 }
 
-function createNodeHtml(text, bgColor) {
-    return `<div style="padding: 8px 12px; background-color: ${bgColor}; border-radius: 6px; font-size: 13px; color: #fff; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);">
+function createNodeHtml(text, hue) {
+    return `<div class="ic-pipeline-node" style="--node-hue: ${hue};">
         ${text}
     </div>`;
 }
-

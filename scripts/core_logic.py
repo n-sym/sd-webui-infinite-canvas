@@ -697,10 +697,27 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
     ]
     
     try:
+        total_steps = 0
+        steps_accumulated = 0
+        
         for step in pipeline:
             if step.id not in ctx.step_params:
                 ctx.step_params[step.id] = {}
             ctx.var = ctx.step_params[step.id]
+            
+            # Update total steps once params are populated
+            if step.id == "setup_processing":
+                total_steps += ctx.steps
+                if ctx.step_params.get("edge_fix", {}).get("enabled", False):
+                    power = ctx.step_params.get("edge_fix", {}).get("power", 1.0)
+                    total_steps += max(1, int(ctx.steps * 0.2 * power))
+                    
+            if step.id == "edge_fix":
+                steps_accumulated += ctx.steps
+            
+            # Update WebUI progress text
+            hue = getattr(step, 'sort_index', 0) % 360
+            shared.state.textinfo = f"{getattr(step, 'name', step.id)}|{hue}|{total_steps}|{steps_accumulated}"
             
             ctx = step(ctx)
             if ctx.is_error or ctx.final_payload != "":
@@ -809,7 +826,7 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
     mask_b64 = data.get("mask", "")
 
     meta = {
-        "version": 3,
+        "version": 2,
         "viewport": viewport,
         "prompt": p_prompt,
         "negative_prompt": p_neg,
@@ -901,16 +918,14 @@ def api_load_project(*args):
                 meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
                 
             # Version Fallback parsing
-            if meta.get("version", 1) < 3:
-                # Migrate old meta to v3 format internally
-                meta["version"] = 3
-                if "workflow" not in meta:
-                    meta["workflow"] = []
-                if "step_params" not in meta:
-                    meta["step_params"] = {
-                        "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
-                        "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
-                    }
+            if meta.get("version", 1) == 1:
+                # Migrate old v1 meta to v2 format internally
+                meta["version"] = 2
+                meta["workflow"] = []
+                meta["step_params"] = {
+                    "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
+                    "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
+                }
             
             canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
 
@@ -958,13 +973,7 @@ def api_load_project(*args):
             canvas_state.tiles = load_tiles("canvas") or {}
             canvas_state.tiles_prev = load_tiles("canvas_prev")
             canvas_state.tiles_now = load_tiles("canvas_now")
-            if meta.get("version", 1) < 3:
-                # Reconstruct bounds safely from tiles for older projects lacking accurate bounding boxes
-                canvas_state._ensure_bounds_cover_tiles()
-            else:
-                canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
-            
-            canvas_state.current_state = 'now'
+            canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
 
             # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
             m_img = None

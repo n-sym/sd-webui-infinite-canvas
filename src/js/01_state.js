@@ -10,26 +10,42 @@ const canvas = document.getElementById('ic-canvas');
             <div style="line-height: 1.6; font-size: 14px;">
                 <p><strong>${t('👆 Basics & Navigation')}</strong></p>
                 <ul style="margin-bottom: 15px;">
-                    <li><strong>${t('Pan Canvas')}:</strong> ${t('Pan Canvas Desc')}</li>
-                    <li><strong>${t('Zoom')}:</strong> ${t('Zoom Desc')}</li>
+                    <li><strong>${t('Pan Canvas')}:</strong> ${t('Hold <kbd>Alt</kbd> + Left click / Right click outside the blue box to pan the canvas. Click Middle Mouse Button to reset camera.')}</li>
+                    <li><strong>${t('Zoom Canvas')}:</strong> ${t('Use the mouse wheel to zoom in and out.')}</li>
                 </ul>
                 
                 <p><strong>${t('🟦 The Generation Area (Blue Box)')}</strong></p>
                 <ul style="margin-bottom: 15px;">
-                    <li><strong>${t('Move Box')}:</strong> ${t('Move Box Desc')}</li>
-                    <li><strong>${t('Rotate Box')}:</strong> ${t('Rotate Box Desc')}</li>
+                    <li><strong>${t('Properties')}:</strong> ${t('Appears as a blue dashed box. This area is fed into the generation model, hereafter referred to as the [Blue Box].')}</li>
+                    <li><strong>${t('Move Box')}:</strong> ${t('Hold <kbd>Alt</kbd> + Left click / Right click inside the blue box to move it.')}</li>
+                    <li><strong>${t('Rotate Box')}:</strong> ${t('Hold <kbd>Shift</kbd> + Left click drag anywhere to rotate the blue box.')}</li>
                 </ul>
                 
                 <p><strong>${t('🖌️ Drawing Masks')}</strong></p>
                 <ul style="margin-bottom: 15px;">
-                    <li>${t('Draw Mask Desc 1')}</li>
-                    <li>${t('Draw Mask Desc 2')}</li>
+                    <li>${t('Drag with the Left Mouse Button anywhere to draw masks. Masks outside the blue box will be ignored.')}</li>
+                    <li>${t('When scaling the blue box, masks will be preserved as losslessly as possible.')}</li>
+                    <li>${t('The logical resolution of the mask will not exceed twice the actual resolution of the blue box.')}</li>
+                    <li>${t('Mask operations can be undone/redone. Panning is not considered a mask operation. Undo is bound to <kbd>Ctrl + Z</kbd>.')}</li>
+                    <li>${t('The Magic Wand tool uses the SAM model, which requires an additional download and may take time depending on network conditions.')}</li>
                 </ul>
                 
                 <p><strong>${t('🔄 Undo/Redo & Generation')}</strong></p>
                 <ul style="margin-bottom: 15px;">
-                    <li>${t('Undo Desc 1')}</li>
-                    <li>${t('Undo Desc 2')}</li>
+                    <li>${t('After generation, a preview modal will pop up. You can adjust feathering before applying.')}</li>
+                    <li>${t('You can use the Canvas Undo/Redo buttons in the toolbar to revert your actions anytime.')}</li>
+                </ul>
+
+                <p><strong>${t('💾 Project Management')}</strong></p>
+                <ul style="margin-bottom: 15px;">
+                    <li>${t('You can load and save projects, retaining most of the temporary data during your workflow.')}</li>
+                    <li>${t('There is a tutorial.infcanvas file in the extension root directory as an example project.')}</li>
+                </ul>
+
+                <p><strong>${t('🔌 Plugins')}</strong></p>
+                <ul style="margin-bottom: 15px;">
+                    <li>${t('There are currently several Built-In plugins available.')}</li>
+                    <li>${t('More plugin-related features may be implemented in the future.')}</li>
                 </ul>
             </div>
         </div>

@@ -55,7 +55,15 @@
         
         const inSource = isPointInRect(w.x, w.y, sourceRect);
         
-        if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
+        if (e.button === 1) {
+            scale = 1;
+            offsetX = canvas.width / 2 - (sourceRect.x + sourceRect.w / 2);
+            offsetY = canvas.height / 2 - (sourceRect.y + sourceRect.h / 2);
+            draw();
+            return;
+        }
+        
+        if (e.button === 2 || (e.button === 0 && e.altKey)) {
             if (inSource) {
                 isDraggingSource = true;
                 dragStartX = w.x - sourceRect.x;

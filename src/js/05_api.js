@@ -62,16 +62,8 @@
                 
                 window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7) + ")";
                 if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
-                if (typeof requestProgress === 'function') {
-                    requestProgress(
-                        window.ic_current_task_id,
-                        document.getElementById("ic-container"),
-                        null,
-                        function() {
-                            if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", true);
-                        }
-                    );
-                }
+                // We removed requestProgress here to prevent WebUI from injecting its native progress bar.
+                // Our custom polling in 08_progress.js handles progress now.
                 setTimeout(() => document.getElementById('ic_trigger')?.click(), 100);
             }
         });
