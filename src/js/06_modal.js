@@ -125,13 +125,21 @@
                 }
                 
                 if (type === 'old') {
-                    if (bgImage && bgImage.complete && bgImage.naturalWidth > 0) {
+                    if (window.ic_tiles) {
                         mctx.save();
                         mctx.scale(dpr, dpr);
                         mctx.translate(rect.width/2, rect.height/2);
                         mctx.scale(currentScale, currentScale);
                         mctx.translate(-currentCenterX, -currentCenterY);
-                        mctx.drawImage(bgImage, 0, 0);
+                        
+                        const TILE_SIZE = 1024;
+                        for (const key in window.ic_tiles) {
+                            const [tx, ty] = key.split(',').map(Number);
+                            const tileImg = window.ic_tiles[key];
+                            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                                mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                            }
+                        }
                         
                         let bx = sourceRect.x;
                         let by = sourceRect.y;
@@ -151,14 +159,21 @@
                         mctx.restore();
                     }
                 } else if (type === 'new') {
-                    if (bgImage && pendingPatchImage.complete && pendingMaskImage.complete) {
+                    if (window.ic_tiles && pendingPatchImage.complete && pendingMaskImage.complete) {
                         mctx.save();
                         mctx.scale(dpr, dpr);
                         mctx.translate(rect.width/2, rect.height/2);
                         mctx.scale(currentScale, currentScale);
                         mctx.translate(-currentCenterX, -currentCenterY);
                         
-                        mctx.drawImage(bgImage, 0, 0);
+                        const TILE_SIZE = 1024;
+                        for (const key in window.ic_tiles) {
+                            const [tx, ty] = key.split(',').map(Number);
+                            const tileImg = window.ic_tiles[key];
+                            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                                mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                            }
+                        }
                         
                         if (pendingUpdate && pendingUpdate.transform) {
                             const t = pendingUpdate.transform;
@@ -319,15 +334,28 @@
                 lastText = text;
                 try {
                     const data = JSON.parse(text);
+                    
+                    // Helper to populate tiles
+                    const populateTiles = (tilesArray) => {
+                        window.ic_tiles = {};
+                        if (!tilesArray) return;
+                        for (let i = 0; i < tilesArray.length; i++) {
+                            let t = tilesArray[i];
+                            let img = new Image();
+                            img.onload = () => { if(typeof draw === 'function') draw(); };
+                            img.src = t.data;
+                            window.ic_tiles[`${t.tx},${t.ty}`] = img;
+                        }
+                    };
+
                     if (data.type === 'session_check') {
                         if (data.has_session) {
                             sessionPreview.src = data.preview;
                             sessionModal.style.display = 'flex';
                         }
-                    } else if (data.type === 'session_restore' || data.type === 'session_clear') {
-                        if (data.image) {
-                            bgImage.src = data.image;
-                            draw();
+                    } else if (data.type === 'session_restore' || data.type === 'session_clear' || data.type === 'session_cleared' || data.type === 'toggle' || data.type === 'upload' || data.type === 'discard') {
+                        if (data.tiles) {
+                            populateTiles(data.tiles);
                         }
                     } else if (data.type === 'preview') {
                         // Delay applying! Show Modal instead.
@@ -340,7 +368,8 @@
                         imagesToLoad = 2;
                         pendingPatchImage.src = data.patch;
                         pendingMaskImage.src = data.mask;
-                        bgImage.src = data.image; // Base canvas (might have been padded)
+                        
+                        if (data.tiles) populateTiles(data.tiles);
                         
                         const toggleEdgeBtn = document.getElementById('ic-modal-toggle-edge');
                         showEdgeMask = false; // Reset to off by default
@@ -359,14 +388,6 @@
                         modalOverlay.style.display = 'flex';
                     } else if (data.type === 'project_load') {
                         // Suppress enforceSourceRatio() during the entire load.
-                        // Gradio updates gen_width/gen_height sliders asynchronously
-                        // after api_load_project returns. Each slider update fires an
-                        // 'input' → draw() → enforceSourceRatio(). If only one slider
-                        // has been updated, the aspect ratio is temporarily wrong and
-                        // enforceSourceRatio() would corrupt the loaded sourceRect.
-                        // We suppress for 600ms — enough for all Gradio outputs and
-                        // async image loads to settle — then do one final draw() with
-                        // enforcement re-enabled.
                         window._ic_project_load_suppress = true;
                         if (window._ic_project_load_timer) clearTimeout(window._ic_project_load_timer);
                         window._ic_project_load_timer = setTimeout(() => {
@@ -375,39 +396,28 @@
                             draw();
                         }, 600);
 
-                        // Restore viewport FIRST, before any draw() or clearMask()
-                        if (data.meta && data.meta.viewport) {
-                            const vp = data.meta.viewport;
+                        // Restore viewport FIRST
+                        if (data.viewport) {
+                            const vp = data.viewport;
                             scale = vp.scale;
                             offsetX = vp.offsetX;
                             offsetY = vp.offsetY;
                             sourceRect = vp.sourceRect;
                         }
 
-                        // Eagerly sync gen_width / gen_height to DOM so that
-                        // getGenSize() returns correct values even if Gradio hasn't
-                        // updated the sliders yet when enforcement resumes.
-                        if (data.meta) {
-                            if (data.meta.gen_width != null) {
-                                const gwEl = document.querySelector('#ic_gen_width input[type="number"]');
-                                if (gwEl) gwEl.value = data.meta.gen_width;
-                            }
-                            if (data.meta.gen_height != null) {
-                                const ghEl = document.querySelector('#ic_gen_height input[type="number"]');
-                                if (ghEl) ghEl.value = data.meta.gen_height;
-                            }
+                        if (data.tiles) {
+                            populateTiles(data.tiles);
                         }
-
-                        if (data.image) {
-                            bgImage.src = data.image;
-                        }
+                        
                         if (data.mask) {
                             const img = new Image();
                             img.onload = () => {
-                                maskDataCanvas.width = img.width;
-                                maskDataCanvas.height = img.height;
+                                const res = window.ic_getMaskResolution();
+                                maskDataCanvas.width = res.w;
+                                maskDataCanvas.height = res.h;
                                 maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
-                                maskDataCtx.drawImage(img, 0, 0);
+                                maskDataCtx.imageSmoothingEnabled = false;
+                                maskDataCtx.drawImage(img, 0, 0, maskDataCanvas.width, maskDataCanvas.height);
                                 resetMaskHistory(); // Reset history after project load
                                 draw();
                             };
@@ -417,16 +427,13 @@
                         }
 
                         draw();
-                    } else if (data.type === 'apply' || data.type === 'discard' || data.image) {
-                        // Final update
-                        if (data.image) bgImage.src = data.image;
-                        draw();
                     } else if (data.type === 'sam_result') {
                         if (data.mask) {
                             const img = new Image();
                             img.onload = () => {
                                 maskDataCtx.globalCompositeOperation = 'source-over';
-                                maskDataCtx.drawImage(img, 0, 0);
+                                maskDataCtx.imageSmoothingEnabled = false;
+                                maskDataCtx.drawImage(img, 0, 0, maskDataCanvas.width, maskDataCanvas.height);
                                 saveMaskState(); // Save after Magic Wand stroke for undo
                                 draw();
                                 document.body.style.cursor = 'default';

@@ -4,21 +4,32 @@
 
 
 
+    window.ic_getMaskResolution = function() {
+        const size = getGenSize();
+        const maxW = size.w * 2;
+        const maxH = size.h * 2;
+        return {
+            w: Math.max(1, Math.min(Math.round(sourceRect.w), maxW)),
+            h: Math.max(1, Math.min(Math.round(sourceRect.h), maxH))
+        };
+    };
+
     function clearMask() {
-        maskDataCanvas.width = Math.max(sourceRect.w, 1);
-        maskDataCanvas.height = Math.max(sourceRect.h, 1);
+        const res = window.ic_getMaskResolution();
+        maskDataCanvas.width = res.w;
+        maskDataCanvas.height = res.h;
         maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
         maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
         targetRect = {x: 0, y: 0, w: 0, h: 0};
-        // Save cleared state so the clear itself is undoable
         saveMaskState();
     }
 
     function resizeSourceRect(newW, newH) {
         const oldX = sourceRect.x;
         const oldY = sourceRect.y;
+        const oldW = sourceRect.w;
+        const oldH = sourceRect.h;
         
-        // Save current mask to temp
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.max(maskDataCanvas.width, 1);
         tempCanvas.height = Math.max(maskDataCanvas.height, 1);
@@ -27,22 +38,27 @@
         const cx = sourceRect.x + sourceRect.w / 2;
         const cy = sourceRect.y + sourceRect.h / 2;
         
-        // Ensure new dimensions and positions are rounded to integers to avoid drift
         sourceRect.w = Math.round(newW);
         sourceRect.h = Math.round(newH);
         sourceRect.x = Math.round(cx - sourceRect.w / 2);
         sourceRect.y = Math.round(cy - sourceRect.h / 2);
         
-        // Resize actual mask canvas
-        maskDataCanvas.width = Math.max(sourceRect.w, 1);
-        maskDataCanvas.height = Math.max(sourceRect.h, 1);
+        const res = window.ic_getMaskResolution();
+        maskDataCanvas.width = res.w;
+        maskDataCanvas.height = res.h;
         maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
+        maskDataCtx.imageSmoothingEnabled = false;
         maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
         
-        // Draw old mask exactly relative to the new integer world coordinates
-        const offsetX = oldX - sourceRect.x;
-        const offsetY = oldY - sourceRect.y;
-        maskDataCtx.drawImage(tempCanvas, offsetX, offsetY);
+        const scaleX = maskDataCanvas.width / sourceRect.w;
+        const scaleY = maskDataCanvas.height / sourceRect.h;
+        
+        const offsetX = (oldX - sourceRect.x) * scaleX;
+        const offsetY = (oldY - sourceRect.y) * scaleY;
+        const drawW = oldW * scaleX;
+        const drawH = oldH * scaleY;
+        
+        maskDataCtx.drawImage(tempCanvas, offsetX, offsetY, drawW, drawH);
         
         // targetRect doesn't need to be strictly cleared, but we'll let api re-calculate it on next gen
         targetRect = {x: 0, y: 0, w: 0, h: 0};
@@ -90,8 +106,8 @@
         sourceRect.y = cy - sourceRect.h / 2;
 
         // Restore mask canvas content at the historical dimensions
-        maskDataCanvas.width = Math.max(entry.rectW, 1);
-        maskDataCanvas.height = Math.max(entry.rectH, 1);
+        maskDataCanvas.width = Math.max(entry.imageData.width, 1);
+        maskDataCanvas.height = Math.max(entry.imageData.height, 1);
         maskDataCtx = maskDataCanvas.getContext('2d', { willReadFrequently: true });
         maskDataCtx.putImageData(entry.imageData, 0, 0);
 
@@ -181,19 +197,6 @@
             
             let newW = sourceRect.h * targetRatio;
             let newH = sourceRect.h;
-            
-            if (!window.ic_ignore_size_limit && (newW > 8192 || newH > 8192)) {
-                const modal = document.getElementById('ic-limit-modal');
-                if (modal && modal.style.display === 'none') {
-                    modal.style.display = 'flex';
-                }
-                let maxFactorW = 8192 / newW;
-                let maxFactorH = 8192 / newH;
-                let allowedFactor = Math.min(maxFactorW, maxFactorH);
-                newW *= allowedFactor;
-                newH *= allowedFactor;
-            }
-            
             resizeSourceRect(newW, newH);
         }
     }
@@ -216,11 +219,13 @@
             }
         }
         if (found) {
+            const scaleX = sourceRect.w / maskDataCanvas.width;
+            const scaleY = sourceRect.h / maskDataCanvas.height;
             targetRect = {
-                x: sourceRect.x + minX,
-                y: sourceRect.y + minY,
-                w: maxX - minX + 1,
-                h: maxY - minY + 1
+                x: sourceRect.x + minX * scaleX,
+                y: sourceRect.y + minY * scaleY,
+                w: (maxX - minX + 1) * scaleX,
+                h: (maxY - minY + 1) * scaleY
             };
         } else {
             // Default if nothing drawn

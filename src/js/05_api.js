@@ -9,12 +9,21 @@
                 maskC.width = targetRect.w;
                 maskC.height = targetRect.h;
                 const mctx = maskC.getContext('2d');
+                mctx.imageSmoothingEnabled = false;
                 mctx.fillStyle = 'black';
                 mctx.fillRect(0, 0, maskC.width, maskC.height);
                 
+                const scaleX = maskDataCanvas.width / sourceRect.w;
+                const scaleY = maskDataCanvas.height / sourceRect.h;
+                
+                const srcX = (targetRect.x - sourceRect.x) * scaleX;
+                const srcY = (targetRect.y - sourceRect.y) * scaleY;
+                const srcW = targetRect.w * scaleX;
+                const srcH = targetRect.h * scaleY;
+                
                 mctx.drawImage(
                     maskDataCanvas,
-                    targetRect.x - sourceRect.x, targetRect.y - sourceRect.y, targetRect.w, targetRect.h,
+                    srcX, srcY, srcW, srcH,
                     0, 0, targetRect.w, targetRect.h
                 );
                 maskBase64 = maskC.toDataURL('image/png');
@@ -128,13 +137,19 @@
     const downloadBtn = document.getElementById('ic_download_btn');
     if (downloadBtn) {
         downloadBtn.addEventListener('click', () => {
-            if (bgImage.src) {
-                const a = document.createElement('a');
-                a.href = bgImage.src;
-                a.download = 'infinite_canvas_' + new Date().toISOString().replace(/:/g, '-') + '.png';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
+                window.ic_stitchTilesToBlob((blob) => {
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'infinite_canvas_' + new Date().toISOString().replace(/:/g, '-') + '.png';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                });
             }
         });
     }
@@ -189,21 +204,21 @@
     const copyBtn = document.getElementById('ic_copy_btn');
     if (copyBtn) {
         copyBtn.addEventListener('click', () => {
-            if (bgImage.src) {
-                fetch(bgImage.src)
-                    .then(res => res.blob())
-                    .then(blob => {
+            if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
+                window.ic_stitchTilesToBlob((blob) => {
+                    if (blob) {
                         const item = new ClipboardItem({ 'image/png': blob });
                         navigator.clipboard.write([item]).then(() => {
                             const oldText = copyBtn.innerText;
-                            copyBtn.innerText = t('Copied!');
+                            copyBtn.innerText = typeof t === 'function' ? t('Copied!') : 'Copied!';
                             setTimeout(() => {
                                 copyBtn.innerText = oldText;
                             }, 2000);
                         }).catch(e => {
                             console.error('Copy failed:', e);
                         });
-                    });
+                    }
+                });
             }
         });
     }

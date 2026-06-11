@@ -35,32 +35,10 @@ const canvas = document.getElementById('ic-canvas');
         </div>
     </div>`;
 
-    const limitModalHTML = `
-    <div id="ic-limit-modal" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3100; justify-content: center; align-items: center;">
-        <div style="background: var(--body-background-fill, #1e1e1e); color: var(--body-text-color, #e0e0e0); padding: 30px; border-radius: 12px; width: 80%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-family: sans-serif; position: relative; border: 1px solid #444; text-align: center;">
-            <h2 style="margin-top: 0; color: #ff5555; margin-bottom: 15px;">${t('⚠️ 尺寸超限警告')}</h2>
-            <p style="margin-bottom: 25px; line-height: 1.5; color: var(--body-text-color, #e0e0e0);">${t('蓝框尺寸即将超过 8192x8192！<br>继续扩大极大概率导致显存溢出 (OOM)。')}</p>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="ic-limit-cancel" class="res-preset-btn" style="flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">${t('取消操作并保持限制')}</button>
-                <button id="ic-limit-unlock" class="res-preset-btn primary" style="flex: 1; padding: 10px; border: none; border-radius: 6px; cursor: pointer;">${t('解除限制 (不再提示)')}</button>
-            </div>
-        </div>
-    </div>`;
-
     container.insertAdjacentHTML('beforeend', guideModalHTML);
-    container.insertAdjacentHTML('beforeend', limitModalHTML);
     
     document.getElementById('ic-guide-close').addEventListener('click', () => {
         document.getElementById('ic-guide-modal').style.display = 'none';
-    });
-
-    document.getElementById('ic-limit-cancel')?.addEventListener('click', () => {
-        document.getElementById('ic-limit-modal').style.display = 'none';
-    });
-
-    document.getElementById('ic-limit-unlock')?.addEventListener('click', () => {
-        window.ic_ignore_size_limit = true;
-        document.getElementById('ic-limit-modal').style.display = 'none';
     });
     
     // Inject Modal HTML
@@ -438,10 +416,9 @@ const canvas = document.getElementById('ic-canvas');
         const floatCopyBtn = document.getElementById('ic_float_copy');
         if (floatCopyBtn) {
             floatCopyBtn.addEventListener('click', () => {
-                if (bgImage && bgImage.src) {
-                    fetch(bgImage.src)
-                        .then(res => res.blob())
-                        .then(blob => {
+                if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
+                    window.ic_stitchTilesToBlob((blob) => {
+                        if (blob) {
                             const item = new ClipboardItem({ 'image/png': blob });
                             navigator.clipboard.write([item]).then(() => {
                                 const oldText = floatCopyBtn.innerText;
@@ -452,7 +429,8 @@ const canvas = document.getElementById('ic-canvas');
                             }).catch(e => {
                                 console.error('Copy failed:', e);
                             });
-                        });
+                        }
+                    });
                 }
             });
         }
@@ -469,6 +447,42 @@ const canvas = document.getElementById('ic-canvas');
         }
     }, 1000);
 
+    window.ic_stitchTilesToBlob = function(callback) {
+        if (!window.ic_tiles || Object.keys(window.ic_tiles).length === 0) {
+            callback(null);
+            return;
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        const TILE_SIZE = 1024;
+        for (const key in window.ic_tiles) {
+            const [tx, ty] = key.split(',').map(Number);
+            const tileImg = window.ic_tiles[key];
+            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                minX = Math.min(minX, tx * TILE_SIZE);
+                minY = Math.min(minY, ty * TILE_SIZE);
+                maxX = Math.max(maxX, tx * TILE_SIZE + tileImg.naturalWidth);
+                maxY = Math.max(maxY, ty * TILE_SIZE + tileImg.naturalHeight);
+            }
+        }
+        if (minX === Infinity) {
+            callback(null);
+            return;
+        }
+        const offscreen = document.createElement('canvas');
+        offscreen.width = maxX - minX;
+        offscreen.height = maxY - minY;
+        const octx = offscreen.getContext('2d');
+        for (const key in window.ic_tiles) {
+            const [tx, ty] = key.split(',').map(Number);
+            const tileImg = window.ic_tiles[key];
+            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                octx.drawImage(tileImg, tx * TILE_SIZE - minX, ty * TILE_SIZE - minY);
+            }
+        }
+        offscreen.toBlob((blob) => {
+            callback(blob);
+        }, 'image/png');
+    };
 
     const ctx = canvas.getContext('2d');
     
@@ -501,9 +515,7 @@ const canvas = document.getElementById('ic-canvas');
     let offsetX = canvas.width / 2 - 512;
     let offsetY = canvas.height / 2 - 512;
     
-    let bgImage = new Image();
-    bgImage.onload = () => draw();
-    bgImage.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='; 
+    window.ic_tiles = {};
     
     let isDraggingCanvas = false;
     let isDraggingSource = false;

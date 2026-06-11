@@ -82,21 +82,35 @@
                 const cy = sourceRect.y + sourceRect.h / 2;
                 const p = rotatePoint(startX, startY, cx, cy, -(sourceRect.angle || 0));
                 
-                // Point relative to the source rect
-                const px = p.x - sourceRect.x;
-                const py = p.y - sourceRect.y;
+                const res = window.ic_getMaskResolution();
+                const scaleX = res.w / sourceRect.w;
+                const scaleY = res.h / sourceRect.h;
+                
+                // Point relative to the source rect, scaled to mask resolution
+                const px = (p.x - sourceRect.x) * scaleX;
+                const py = (p.y - sourceRect.y) * scaleY;
                 
                 const getCrop = () => {
                     const c = document.createElement('canvas');
-                    c.width = sourceRect.w;
-                    c.height = sourceRect.h;
+                    c.width = res.w;
+                    c.height = res.h;
                     const cctx = c.getContext('2d');
                     
-                    cctx.translate(c.width / 2, c.height / 2);
+                    cctx.scale(scaleX, scaleY);
+                    
+                    cctx.translate(sourceRect.w / 2, sourceRect.h / 2);
                     cctx.rotate(-(sourceRect.angle || 0));
                     cctx.translate(-cx, -cy);
                     
-                    cctx.drawImage(bgImage, 0, 0);
+                    if (window.ic_tiles) {
+                        for (const key in window.ic_tiles) {
+                            const [tx, ty] = key.split(',').map(Number);
+                            const tileImg = window.ic_tiles[key];
+                            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                                cctx.drawImage(tileImg, tx * 1024, ty * 1024);
+                            }
+                        }
+                    }
                     return c.toDataURL('image/jpeg', 0.9);
                 };
                 
@@ -105,6 +119,7 @@
                 
                 let dilationValue = parseInt(window.ic_brush_size, 10);
                 if (isNaN(dilationValue)) dilationValue = 10;
+                dilationValue = Math.max(1, Math.round(dilationValue * scaleX));
                 
                 const payload = {
                     image: getCrop(),
@@ -138,10 +153,13 @@
                 const cy = sourceRect.y + sourceRect.h / 2;
                 const p = rotatePoint(startX, startY, cx, cy, -(sourceRect.angle || 0));
                 
+                const scaleX = maskDataCanvas.width / sourceRect.w;
+                const scaleY = maskDataCanvas.height / sourceRect.h;
+                
                 maskDataCtx.globalCompositeOperation = tool === 'Eraser' ? 'destination-out' : 'source-over';
                 maskDataCtx.fillStyle = 'white';
                 maskDataCtx.beginPath();
-                maskDataCtx.arc(p.x - sourceRect.x, p.y - sourceRect.y, currentStroke.radius, 0, Math.PI * 2);
+                maskDataCtx.arc((p.x - sourceRect.x) * scaleX, (p.y - sourceRect.y) * scaleY, currentStroke.radius * scaleX, 0, Math.PI * 2);
                 maskDataCtx.fill();
                 draw();
             }
@@ -203,14 +221,17 @@
                 const p1 = rotatePoint(currentStroke.lastX, currentStroke.lastY, cx, cy, -(sourceRect.angle || 0));
                 const p2 = rotatePoint(w.x, w.y, cx, cy, -(sourceRect.angle || 0));
                 
+                const scaleX = maskDataCanvas.width / sourceRect.w;
+                const scaleY = maskDataCanvas.height / sourceRect.h;
+                
                 maskDataCtx.globalCompositeOperation = currentStroke.type === 'eraser' ? 'destination-out' : 'source-over';
                 maskDataCtx.strokeStyle = 'white';
-                maskDataCtx.lineWidth = currentStroke.radius * 2;
+                maskDataCtx.lineWidth = currentStroke.radius * 2 * scaleX;
                 maskDataCtx.lineCap = 'round';
                 maskDataCtx.lineJoin = 'round';
                 maskDataCtx.beginPath();
-                maskDataCtx.moveTo(p1.x - sourceRect.x, p1.y - sourceRect.y);
-                maskDataCtx.lineTo(p2.x - sourceRect.x, p2.y - sourceRect.y);
+                maskDataCtx.moveTo((p1.x - sourceRect.x) * scaleX, (p1.y - sourceRect.y) * scaleY);
+                maskDataCtx.lineTo((p2.x - sourceRect.x) * scaleX, (p2.y - sourceRect.y) * scaleY);
                 maskDataCtx.stroke();
                 
                 currentStroke.lastX = w.x;
@@ -229,12 +250,15 @@
 
         if (isDrawingRect || isDrawingEllipse) {
             if (currentStroke) {
+                const scaleX = maskDataCanvas.width / sourceRect.w;
+                const scaleY = maskDataCanvas.height / sourceRect.h;
+
                 maskDataCtx.globalCompositeOperation = 'source-over';
                 maskDataCtx.fillStyle = 'white';
 
                 maskDataCtx.save();
-                const mcx = sourceRect.w / 2;
-                const mcy = sourceRect.h / 2;
+                const mcx = maskDataCanvas.width / 2;
+                const mcy = maskDataCanvas.height / 2;
                 maskDataCtx.translate(mcx, mcy);
                 maskDataCtx.rotate(-(sourceRect.angle || 0));
 
@@ -242,17 +266,17 @@
                 const wcy = sourceRect.y + sourceRect.h / 2;
 
                 if (currentStroke.type === 'rect') {
-                    const offsetX = currentStroke.x - wcx;
-                    const offsetY = currentStroke.y - wcy;
-                    maskDataCtx.fillRect(offsetX, offsetY, currentStroke.w, currentStroke.h);
+                    const offsetX = (currentStroke.x - wcx) * scaleX;
+                    const offsetY = (currentStroke.y - wcy) * scaleY;
+                    maskDataCtx.fillRect(offsetX, offsetY, currentStroke.w * scaleX, currentStroke.h * scaleY);
                 } else if (currentStroke.type === 'ellipse') {
                     maskDataCtx.beginPath();
-                    const offsetX = currentStroke.x - wcx + currentStroke.w / 2;
-                    const offsetY = currentStroke.y - wcy + currentStroke.h / 2;
+                    const offsetX = (currentStroke.x - wcx + currentStroke.w / 2) * scaleX;
+                    const offsetY = (currentStroke.y - wcy + currentStroke.h / 2) * scaleY;
                     maskDataCtx.ellipse(
                         offsetX, offsetY,
-                        Math.abs(currentStroke.w/2),
-                        Math.abs(currentStroke.h/2),
+                        Math.abs(currentStroke.w/2 * scaleX),
+                        Math.abs(currentStroke.h/2 * scaleY),
                         0, 0, 2 * Math.PI
                     );
                     maskDataCtx.fill();
@@ -294,20 +318,6 @@
             
             let newW = sourceRect.w * factor;
             let newH = sourceRect.h * factor;
-            
-            if (!window.ic_ignore_size_limit && (newW > 8192 || newH > 8192)) {
-                const modal = document.getElementById('ic-limit-modal');
-                if (modal && modal.style.display === 'none') {
-                    modal.style.display = 'flex';
-                }
-                let maxFactorW = 8192 / sourceRect.w;
-                let maxFactorH = 8192 / sourceRect.h;
-                let allowedFactor = Math.min(maxFactorW, maxFactorH);
-                if (allowedFactor < 1) allowedFactor = 1; // Don't shrink if trying to grow
-                factor = Math.min(factor, allowedFactor);
-                newW = sourceRect.w * factor;
-                newH = sourceRect.h * factor;
-            }
             
             resizeSourceRect(newW, newH);
         } else {

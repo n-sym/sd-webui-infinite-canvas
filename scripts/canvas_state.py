@@ -46,39 +46,62 @@ def distance_based_blur_fill(image: Image.Image, mask: Image.Image) -> Image.Ima
 
 class CanvasState:
     def __init__(self):
-        # Initial canvas is 1024x1024 transparent
-        self.image = Image.new("RGBA", (1024, 1024), (255, 255, 255, 0))
-        self.image_prev = None
-        self.image_now = None
+        self.TILE_SIZE = 1024
+        self.tiles = {}  # {(tx, ty): PIL.Image}
+        self.tiles_prev = None
+        self.tiles_now = None
         self.pending_data = None
-        self.max_size = 8192  # Configurable max canvas size limit
+        self.canvas_bounds = {"x": 0, "y": 0, "w": 1024, "h": 1024}
+        self.max_size = 8192
         self.is_dirty = False
         self.current_state = 'now'
         self.workflow = []
         self.step_params = {}
 
     def clear(self):
-        self.image = Image.new("RGBA", (1024, 1024), (255, 255, 255, 0))
-        self.image_prev = None
-        self.image_now = None
+        self.tiles = {}
+        self.tiles_prev = None
+        self.tiles_now = None
         self.pending_data = None
+        self.canvas_bounds = {"x": 0, "y": 0, "w": 1024, "h": 1024}
         self.is_dirty = False
         self.workflow = []
         self.step_params = {}
-        
+
+    def _get_tile(self, tx, ty):
+        if (tx, ty) not in self.tiles:
+            self.tiles[(tx, ty)] = Image.new("RGBA", (self.TILE_SIZE, self.TILE_SIZE), (255, 255, 255, 0))
+        return self.tiles[(tx, ty)]
+
+    def _clone_tiles(self, source_tiles):
+        if source_tiles is None:
+            return None
+        return {k: v.copy() for k, v in source_tiles.items()}
+
+    def _update_bounds(self, x, y, w, h):
+        cx, cy, cw, ch = self.canvas_bounds['x'], self.canvas_bounds['y'], self.canvas_bounds['w'], self.canvas_bounds['h']
+        min_x = min(cx, x)
+        min_y = min(cy, y)
+        max_x = max(cx + cw, x + w)
+        max_y = max(cy + ch, y + h)
+        self.canvas_bounds = {"x": min_x, "y": min_y, "w": max_x - min_x, "h": max_y - min_y}
+
     def update_workflow(self, workflow: list, step_params: dict):
         self.workflow = workflow
         self.step_params = step_params
         
     def update_from_base64(self, base64_str):
-        """Updates canvas from an uploaded base64 string."""
+        """Updates canvas from an uploaded base64 string (single image)."""
         try:
             if base64_str.startswith('data:image'):
                 base64_str = base64_str.split(',')[1]
             image_data = base64.b64decode(base64_str)
-            self.image_prev = self.image.copy()
-            self.image = Image.open(BytesIO(image_data)).convert("RGBA")
-            self.image_now = self.image.copy()
+            img = Image.open(BytesIO(image_data)).convert("RGBA")
+            self.tiles_prev = self._clone_tiles(self.tiles)
+            self.tiles = {}
+            self.canvas_bounds = {"x": 0, "y": 0, "w": img.width, "h": img.height}
+            self._paste_to_tiles(img, 0, 0)
+            self.tiles_now = self._clone_tiles(self.tiles)
             self.is_dirty = True
             return True
         except Exception as e:
@@ -86,55 +109,137 @@ class CanvasState:
             return False
 
     def get_thumbnail_base64(self, max_dim=512):
-        if not self.image:
+        if not self.tiles:
             return ""
-        w, h = self.image.width, self.image.height
-        if w > max_dim or h > max_dim:
-            scale = max_dim / max(w, h)
-            thumb = self.image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-        else:
-            thumb = self.image
+        # Stitch a thumbnail
+        bounds = self.canvas_bounds
+        w, h = bounds['w'], bounds['h']
+        if w <= 0 or h <= 0:
+            return ""
+            
+        scale = min(1.0, max_dim / max(w, h))
+        thumb_w, thumb_h = int(w * scale), int(h * scale)
+        if thumb_w == 0 or thumb_h == 0:
+            return ""
+            
+        thumb = Image.new("RGBA", (thumb_w, thumb_h), (255, 255, 255, 0))
+        for (tx, ty), tile in self.tiles.items():
+            tile_x = tx * self.TILE_SIZE - bounds['x']
+            tile_y = ty * self.TILE_SIZE - bounds['y']
+            
+            scaled_tx = int(tile_x * scale)
+            scaled_ty = int(tile_y * scale)
+            scaled_tw = int(self.TILE_SIZE * scale)
+            scaled_th = int(self.TILE_SIZE * scale)
+            
+            if scaled_tw > 0 and scaled_th > 0:
+                scaled_tile = tile.resize((scaled_tw, scaled_th), Image.LANCZOS)
+                thumb.paste(scaled_tile, (scaled_tx, scaled_ty))
+                
         buffered = BytesIO()
         thumb.save(buffered, format="PNG", compress_level=1)
         return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-    def get_base64(self):
-        buffered = BytesIO()
-        self.image.save(buffered, format="PNG", compress_level=1)
-        return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
+    def get_tiles_payload(self):
+        """Returns all tiles as base64 strings."""
+        import concurrent.futures
+        payload = {"type": "tiles_update", "tiles": []}
+        
+        def process_tile(tx, ty, tile_img):
+            buffered = BytesIO()
+            tile_img.save(buffered, format="WEBP", lossless=True, quality=100, method=0)
+            b64 = "data:image/webp;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
+            return {"tx": tx, "ty": ty, "data": b64}
+            
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_tile, tx, ty, tile) for (tx, ty), tile in self.tiles.items()]
+            for future in concurrent.futures.as_completed(futures):
+                payload["tiles"].append(future.result())
+                
+        return payload
 
     def load_image(self, image):
-        self.image = image.convert("RGBA")
-        self.image_prev = None
-        self.image_now = None
+        img = image.convert("RGBA")
+        self.tiles = {}
+        self.canvas_bounds = {"x": 0, "y": 0, "w": img.width, "h": img.height}
+        self._paste_to_tiles(img, 0, 0)
+        self.tiles_prev = None
+        self.tiles_now = None
         self.current_state = 'now'
 
     def can_undo(self):
-        return self.image_prev is not None and self.current_state != 'prev'
+        return self.tiles_prev is not None and self.current_state != 'prev'
 
     def can_redo(self):
-        return self.image_now is not None and self.current_state != 'now'
+        return self.tiles_now is not None and self.current_state != 'now'
 
     def _pad_to_include(self, rect):
         """
-        Pads the canvas if the rect goes out of bounds.
-        Returns (pad_left, pad_top) which are the offsets added.
+        Expands bounds if necessary. Since we use negative coordinates freely,
+        padding simply means updating the logical bounds. Returns (0,0) as we don't
+        shift the origin anymore!
         """
-        x, y, w, h = rect['x'], rect['y'], rect['w'], rect['h']
+        self._update_bounds(rect['x'], rect['y'], rect['w'], rect['h'])
+        return 0, 0
+
+    def _extract_from_tiles_for_rect(self, rect):
+        import math
+        x1, y1 = int(rect['x']), int(rect['y'])
+        w, h = int(rect['w']), int(rect['h'])
+        x2, y2 = x1 + w, y1 + h
         
-        pad_left = max(0, -x)
-        pad_top = max(0, -y)
-        pad_right = max(0, (x + w) - self.image.width)
-        pad_bottom = max(0, (y + h) - self.image.height)
+        result = Image.new("RGBA", (w, h), (255, 255, 255, 0))
         
-        if pad_left > 0 or pad_top > 0 or pad_right > 0 or pad_bottom > 0:
-            new_w = self.image.width + pad_left + pad_right
-            new_h = self.image.height + pad_top + pad_bottom
-            new_img = Image.new("RGBA", (new_w, new_h), (255, 255, 255, 0))
-            new_img.paste(self.image, (pad_left, pad_top))
-            self.image = new_img
-            
-        return pad_left, pad_top
+        start_tx = math.floor(x1 / self.TILE_SIZE)
+        end_tx = math.floor(x2 / self.TILE_SIZE)
+        start_ty = math.floor(y1 / self.TILE_SIZE)
+        end_ty = math.floor(y2 / self.TILE_SIZE)
+        
+        for ty in range(start_ty, end_ty + 1):
+            for tx in range(start_tx, end_tx + 1):
+                if (tx, ty) in self.tiles:
+                    tile = self.tiles[(tx, ty)]
+                    tile_x = tx * self.TILE_SIZE
+                    tile_y = ty * self.TILE_SIZE
+                    paste_x = tile_x - x1
+                    paste_y = tile_y - y1
+                    result.paste(tile, (paste_x, paste_y))
+        return result
+
+    def _paste_to_tiles(self, image, global_x, global_y, mask=None):
+        import math
+        w, h = image.size
+        x1, y1 = int(global_x), int(global_y)
+        x2, y2 = x1 + w, y1 + h
+        
+        self._update_bounds(x1, y1, w, h)
+        
+        start_tx = math.floor(x1 / self.TILE_SIZE)
+        end_tx = math.floor(x2 / self.TILE_SIZE)
+        start_ty = math.floor(y1 / self.TILE_SIZE)
+        end_ty = math.floor(y2 / self.TILE_SIZE)
+        
+        for ty in range(start_ty, end_ty + 1):
+            for tx in range(start_tx, end_tx + 1):
+                tile_x = tx * self.TILE_SIZE
+                tile_y = ty * self.TILE_SIZE
+                
+                crop_x1 = max(0, tile_x - x1)
+                crop_y1 = max(0, tile_y - y1)
+                crop_x2 = min(w, tile_x + self.TILE_SIZE - x1)
+                crop_y2 = min(h, tile_y + self.TILE_SIZE - y1)
+                
+                if crop_x1 < crop_x2 and crop_y1 < crop_y2:
+                    crop = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+                    if mask:
+                        crop_mask = mask.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+                    else:
+                        crop_mask = crop if crop.mode == 'RGBA' else None
+                        
+                    tile = self._get_tile(tx, ty)
+                    paste_x = max(0, x1 - tile_x)
+                    paste_y = max(0, y1 - tile_y)
+                    tile.paste(crop, (paste_x, paste_y), mask=crop_mask)
 
     def prepare_generation(self, source_rect, target_rect, generation_res=1024, upscaler_name="None", mask_base64="", auto_scale=True, outpaint_pad="全黑 (Black)"):
         """
@@ -150,7 +255,7 @@ class CanvasState:
             target_rect[k] = int(target_rect[k])
             
         # Capture pre-generation state in case of discard
-        self.image_prev = self.image.copy()
+        self.tiles_prev = self._clone_tiles(self.tiles)
             
         # 1. Scale Canvas if Zoom-in (Target drawn small)
         target_max = max(target_rect['w'], target_rect['h'])
@@ -161,15 +266,21 @@ class CanvasState:
         
         actual_canvas_scale = 1.0
         if requested_scale > 1.0 and auto_scale:
-            current_max_dim = max(self.image.width, self.image.height)
-            max_allowed_scale = self.max_size / current_max_dim
+            current_max_dim = max(self.canvas_bounds['w'], self.canvas_bounds['h'])
+            max_allowed_scale = self.max_size / current_max_dim if current_max_dim > 0 else 1.0
             actual_canvas_scale = min(requested_scale, max_allowed_scale)
             
             if actual_canvas_scale > 1.0:
-                new_w = int(self.image.width * actual_canvas_scale)
-                new_h = int(self.image.height * actual_canvas_scale)
-                if new_w > 0 and new_h > 0:
-                    self.image = self.image.resize((new_w, new_h), Image.LANCZOS)
+                bounds = self.canvas_bounds
+                w, h = bounds['w'], bounds['h']
+                if w > 0 and h > 0:
+                    full_img = self._extract_from_tiles_for_rect(bounds)
+                    new_w = int(w * actual_canvas_scale)
+                    new_h = int(h * actual_canvas_scale)
+                    full_img = full_img.resize((new_w, new_h), Image.LANCZOS)
+                    self.tiles = {}
+                    self.canvas_bounds = {"x": 0, "y": 0, "w": new_w, "h": new_h}
+                    self._paste_to_tiles(full_img, int(bounds['x'] * actual_canvas_scale), int(bounds['y'] * actual_canvas_scale))
                 
                 # Scale coordinates
                 for r in [source_rect, target_rect]:
@@ -179,44 +290,28 @@ class CanvasState:
         # 2. Pad canvas if source_rect is out of bounds
         pad_left, pad_top = self._pad_to_include(source_rect)
         
-        # Offset rects if padded
-        if pad_left > 0 or pad_top > 0:
-            for r in [source_rect, target_rect]:
-                r['x'] += pad_left
-                r['y'] += pad_top
-                
         # 3. Extract source image
         sx, sy, sw, sh = source_rect['x'], source_rect['y'], source_rect['w'], source_rect['h']
         angle = float(source_rect.get('angle', 0.0))
         
         if abs(angle) > 0.001:
             import math
-            # Calculate the bounding box needed to safely crop the rotated area
-            # To ensure we don't crop too tightly and cut off corners during rotation,
-            # we crop a larger square based on the diagonal, rotate it, and then crop the exact size.
             diagonal = math.ceil(math.sqrt(sw**2 + sh**2))
             cx, cy = sx + sw // 2, sy + sh // 2
             
-            # Crop the large area
             large_x1, large_y1 = int(cx - diagonal/2), int(cy - diagonal/2)
             large_x2, large_y2 = int(cx + diagonal/2), int(cy + diagonal/2)
             
-            # We might need to pad again if the diagonal crop is out of bounds
-            # For simplicity, let's just use image.crop which automatically pads with 0s if out of bounds in PIL
-            large_crop = self.image.crop((large_x1, large_y1, large_x2, large_y2))
+            large_rect = {"x": large_x1, "y": large_y1, "w": large_x2 - large_x1, "h": large_y2 - large_y1}
+            large_crop = self._extract_from_tiles_for_rect(large_rect)
             
-            # Rotate by negative angle to make the selection straight
-            # math.degrees converts radians to degrees. PIL rotates counter-clockwise.
-            # In JS, angle is Math.atan2, which is clockwise on screen.
-            # So a positive JS angle means clockwise. We want to un-rotate, so counter-clockwise by same amount.
             deg = math.degrees(angle)
             large_rotated = large_crop.rotate(deg, resample=Image.BICUBIC, expand=False)
             
-            # Now crop the exact w, h from the center of this rotated large crop
             center_x, center_y = large_rotated.width // 2, large_rotated.height // 2
             source_crop = large_rotated.crop((center_x - sw//2, center_y - sh//2, center_x + sw//2, center_y + sh//2))
         else:
-            source_crop = self.image.crop((sx, sy, sx+sw, sy+sh))
+            source_crop = self._extract_from_tiles_for_rect(source_rect)
             
         # 3.5 Apply Edge Padding before resize (since resize drops alpha)
         alpha = None
@@ -355,20 +450,12 @@ class CanvasState:
         return self.pending_data
 
     def paste_result(self, result_image, canvas_source_rect, mask=None, downscale_algo="Bicubic"):
-        """
-        Pastes the generated image back into the global canvas.
-        The result_image might be 1024x1024 (or scaled source size), so we resize it 
-        back to the physical size of canvas_source_rect in the canvas.
-        """
-        # (image_prev is now saved in prepare_generation)
-        
-        sw, sh = canvas_source_rect['w'], canvas_source_rect['h']
+        sw, sh = int(canvas_source_rect['w']), int(canvas_source_rect['h'])
         algo_map = {"Bicubic": Image.BICUBIC, "Lanczos": Image.LANCZOS, "Bilinear": Image.BILINEAR, "Nearest": Image.NEAREST}
         algo = algo_map.get(downscale_algo, Image.BICUBIC)
         result_resized = result_image.resize((sw, sh), algo) if result_image.size != (sw, sh) else result_image
         
         angle = float(canvas_source_rect.get('angle', 0.0))
-        
         if mask is not None:
             mask_resized = (mask.resize((sw, sh), Image.BILINEAR) if mask.size != (sw, sh) else mask).convert("L")
         else:
@@ -377,36 +464,24 @@ class CanvasState:
         if abs(angle) > 0.001:
             import math
             deg = math.degrees(angle)
-            
-            # Create a transparent RGBA version of the result so we can rotate it with expand=True
             if result_resized.mode != 'RGBA':
                 res_rgba = result_resized.convert("RGBA")
             else:
                 res_rgba = result_resized
-                
-            # Put mask into alpha if exists, otherwise full opacity
             if mask_resized:
                 res_rgba.putalpha(mask_resized)
-                
-            # Rotate (expand=True so corners aren't cut off)
             rotated_patch = res_rgba.rotate(deg, resample=Image.BICUBIC, expand=True)
             
-            # The paste coordinate needs to be adjusted because expand=True changed the size
             cx = canvas_source_rect['x'] + sw // 2
             cy = canvas_source_rect['y'] + sh // 2
-            
             paste_x = cx - rotated_patch.width // 2
             paste_y = cy - rotated_patch.height // 2
             
-            # Use the rotated patch's own alpha as the mask for pasting
-            self.image.paste(rotated_patch, (paste_x, paste_y), mask=rotated_patch)
+            self._paste_to_tiles(rotated_patch, paste_x, paste_y, mask=rotated_patch)
         else:
-            if mask_resized is not None:
-                self.image.paste(result_resized, (canvas_source_rect['x'], canvas_source_rect['y']), mask=mask_resized)
-            else:
-                self.image.paste(result_resized, (canvas_source_rect['x'], canvas_source_rect['y']))
+            self._paste_to_tiles(result_resized, canvas_source_rect['x'], canvas_source_rect['y'], mask=mask_resized)
             
-        self.image_now = self.image.copy()
+        self.tiles_now = self._clone_tiles(self.tiles)
         self.is_dirty = True
         
     def apply_pending_result(self, feather_radius=0):
@@ -426,13 +501,11 @@ class CanvasState:
         if abs(angle) > 0.001:
             import math
             deg = math.degrees(angle)
-            
             if patch.mode != 'RGBA':
                 res_rgba = patch.convert("RGBA")
             else:
                 res_rgba = patch.copy()
             res_rgba.putalpha(mask)
-            
             rotated_patch = res_rgba.rotate(-deg, resample=Image.BICUBIC, expand=True)
             
             cx = rect['x'] + rect['w'] // 2
@@ -440,17 +513,18 @@ class CanvasState:
             paste_x = cx - rotated_patch.width // 2
             paste_y = cy - rotated_patch.height // 2
             
-            self.image.paste(rotated_patch, (paste_x, paste_y), mask=rotated_patch)
+            self._paste_to_tiles(rotated_patch, paste_x, paste_y, mask=rotated_patch)
         else:
-            self.image.paste(patch, (rect['x'], rect['y']), mask=mask)
-        self.image_now = self.image.copy()
+            self._paste_to_tiles(patch, rect['x'], rect['y'], mask=mask)
+            
+        self.tiles_now = self._clone_tiles(self.tiles)
         self.pending_data = None
         self.is_dirty = True
         self.current_state = 'now'
 
     def discard_pending_result(self):
         self.pending_data = None
-        if self.image_prev:
-            self.image = self.image_prev.copy()
+        if self.tiles_prev:
+            self.tiles = self._clone_tiles(self.tiles_prev)
 
 canvas_state = CanvasState()

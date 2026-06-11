@@ -224,7 +224,7 @@ class PrepareCanvasStep(GenerationStep):
             outpaint_pad=ctx.outpaint_pad
         )
         if not prep_info:
-            ctx.final_payload = json.dumps({"image": canvas_state.get_base64()})
+            ctx.final_payload = json.dumps(canvas_state.get_tiles_payload())
             ctx.is_error = True # Stop pipeline without throwing an error
             return ctx
             
@@ -613,18 +613,16 @@ class FinalizeStateStep(GenerationStep):
         mask_b64 = to_b64(canvas_state.pending_data['mask_rgba'])
         edge_mask_b64 = to_b64(canvas_state.pending_data['edge_mask_rgba']) if 'edge_mask_rgba' in canvas_state.pending_data else None
         
-        payload = {
-            "type": "preview",
-            "image": canvas_state.get_base64(),
-            "patch": patch_b64,
-            "mask": mask_b64,
-            "transform": {
-                "scale": ctx.prep_info['transform']['scale'],
-                "pad_left": ctx.prep_info['transform']['pad_left'],
-                "pad_top": ctx.prep_info['transform']['pad_top'],
-                "rect_x": ctx.canvas_source_rect['x'],
-                "rect_y": ctx.canvas_source_rect['y']
-            }
+        payload = canvas_state.get_tiles_payload()
+        payload["type"] = "preview"
+        payload["patch"] = patch_b64
+        payload["mask"] = mask_b64
+        payload["transform"] = {
+            "scale": ctx.prep_info['transform']['scale'],
+            "pad_left": ctx.prep_info['transform']['pad_left'],
+            "pad_top": ctx.prep_info['transform']['pad_top'],
+            "rect_x": ctx.canvas_source_rect['x'],
+            "rect_y": ctx.canvas_source_rect['y']
         }
         if edge_mask_b64:
             payload["edge_mask"] = edge_mask_b64
@@ -681,10 +679,10 @@ def api_apply(feather_radius):
     try:
         feather = float(feather_radius)
         canvas_state.apply_pending_result(feather)
-        return json.dumps({
-            "type": "apply",
-            "image": canvas_state.get_base64()
-        }), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+        payload = canvas_state.get_tiles_payload()
+        payload["type"] = "preview"
+        payload["is_discard"] = True
+        return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -694,10 +692,9 @@ def api_apply(feather_radius):
 def api_discard():
     try:
         canvas_state.discard_pending_result()
-        return json.dumps({
-            "type": "discard",
-            "image": canvas_state.get_base64()
-        }), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+        payload = canvas_state.get_tiles_payload()
+        payload["type"] = "discard"
+        return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -706,11 +703,11 @@ def api_discard():
 
 def api_check_session():
     if canvas_state.is_dirty:
-        return json.dumps({
-            "type": "session_check",
-            "has_session": True,
-            "preview": canvas_state.get_thumbnail_base64()
-        })
+        payload = canvas_state.get_tiles_payload()
+        payload["type"] = "session_check"
+        payload["has_session"] = True
+        payload["preview"] = canvas_state.get_thumbnail_base64()
+        return json.dumps(payload)
     else:
         return json.dumps({
             "type": "session_check",
@@ -719,41 +716,44 @@ def api_check_session():
 
 
 def api_restore_session():
-    return json.dumps({
-        "type": "session_restore",
-        "image": canvas_state.get_base64()
-    })
+    payload = canvas_state.get_tiles_payload()
+    payload["type"] = "session_restore"
+    payload["thumbnail"] = canvas_state.get_thumbnail_base64(512)
+    return json.dumps(payload)
 
 
 def api_clear_session():
     canvas_state.clear()
-    return json.dumps({
-        "type": "session_clear",
-        "image": canvas_state.get_base64()
-    })
+    payload = canvas_state.get_tiles_payload()
+    payload["type"] = "session_clear"
+    return json.dumps(payload)
 
 
 def reset_canvas():
     from scripts.canvas_state import CanvasState
     import scripts.canvas_state
     scripts.canvas_state.canvas_state = CanvasState()
-    return json.dumps({"image": scripts.canvas_state.canvas_state.get_base64()}), gr.update(interactive=False), gr.update(interactive=False)
+    return json.dumps(scripts.canvas_state.canvas_state.get_tiles_payload()), gr.update(interactive=False), gr.update(interactive=False)
 
 
 def toggle_state(state):
-    if state == 'prev' and canvas_state.image_prev:
-        canvas_state.image = canvas_state.image_prev.copy()
+    if state == 'prev' and canvas_state.tiles_prev:
+        canvas_state.tiles = canvas_state._clone_tiles(canvas_state.tiles_prev)
         canvas_state.current_state = 'prev'
-    elif state == 'now' and canvas_state.image_now:
-        canvas_state.image = canvas_state.image_now.copy()
+    elif state == 'now' and canvas_state.tiles_now:
+        canvas_state.tiles = canvas_state._clone_tiles(canvas_state.tiles_now)
         canvas_state.current_state = 'now'
-    return json.dumps({"image": canvas_state.get_base64()}), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+    payload = canvas_state.get_tiles_payload()
+    payload["type"] = "toggle"
+    return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
 
 
 def handle_upload(image):
     if image is not None:
         canvas_state.load_image(image)
-    return json.dumps({"image": canvas_state.get_base64()}), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+    payload = canvas_state.get_tiles_payload()
+    payload["type"] = "upload"
+    return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
 
 
 def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale):
@@ -795,34 +795,29 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
         futures = []
         executor = concurrent.futures.ThreadPoolExecutor()
 
-        def add_image_tiles(img, base_name):
-            if img:
-                img.load() # ensure the image is fully loaded before multithreading
-                image_sizes[base_name] = img.size
-                w, h = img.size
-                tile_size = 1024
-                for y in range(0, h, tile_size):
-                    for x in range(0, w, tile_size):
-                        box = (x, y, min(x + tile_size, w), min(y + tile_size, h))
-                        def process_tile(crop_box=box):
-                            tile = img.crop(crop_box)
-                            img_io = BytesIO()
-                            tile.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
-                            return (f"{base_name}_t_{crop_box[0]}_{crop_box[1]}.webp", img_io.getvalue())
-                        futures.append(executor.submit(process_tile))
+        def add_tiles_dict(tiles_dict, base_name):
+            if tiles_dict:
+                for (tx, ty), tile_img in tiles_dict.items():
+                    def process_tile(img=tile_img, _tx=tx, _ty=ty):
+                        img_io = BytesIO()
+                        img.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
+                        return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", img_io.getvalue())
+                    futures.append(executor.submit(process_tile))
 
-        add_image_tiles(canvas_state.image, "canvas")
-        add_image_tiles(canvas_state.image_prev, "canvas_prev")
-        add_image_tiles(canvas_state.image_now, "canvas_now")
+        add_tiles_dict(canvas_state.tiles, "canvas")
+        add_tiles_dict(canvas_state.tiles_prev, "canvas_prev")
+        add_tiles_dict(canvas_state.tiles_now, "canvas_now")
 
         if mask_b64 and "," in mask_b64:
             try:
                 m_img = Image.open(BytesIO(base64.b64decode(mask_b64.split(",")[1])))
-                add_image_tiles(m_img, "mask")
+                m_io = BytesIO()
+                m_img.save(m_io, format="WEBP", lossless=True, quality=100, method=4)
+                zip_file.writestr("mask.webp", m_io.getvalue())
             except Exception:
                 pass
 
-        meta["image_sizes"] = image_sizes
+        meta["canvas_bounds"] = canvas_state.canvas_bounds
         zip_file.writestr("meta.json", json.dumps(meta))
 
         for future in concurrent.futures.as_completed(futures):
@@ -873,52 +868,78 @@ def api_load_project(*args):
             
             canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
 
-            def load_img(base_name, is_mask=False):
-                mode = "RGBA" if not is_mask else "RGBA" # Both mask and canvas should preserve their true channels, RGBA or L, but we use RGBA
-                # Actually, canvas needs RGBA to preserve transparency! Mask can be RGBA too.
+            def load_tiles(base_name):
                 mode = "RGBA"
-                if meta.get("image_sizes") and base_name in meta["image_sizes"] and meta["image_sizes"][base_name]:
-                    size = meta["image_sizes"][base_name]
-                    tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
-                    if tile_names:
-                        img = Image.new(mode, tuple(size))
-                        for name in tile_names:
-                            parts = name.replace(".webp", "").split("_")
-                            x, y = int(parts[-2]), int(parts[-1])
-                            tile_data = zip_ref.read(name)
-                            tile_img = Image.open(BytesIO(tile_data))
-                            if tile_img.mode != mode:
-                                tile_img = tile_img.convert(mode)
-                            img.paste(tile_img, (x, y))
-                        return img
+                tiles_dict = {}
+                tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
+                if tile_names:
+                    import concurrent.futures
+                    def load_single_tile(name):
+                        parts = name.replace(".webp", "").split("_")
+                        tx, ty = int(parts[-2]) // 1024, int(parts[-1]) // 1024
+                        tile_data = zip_ref.read(name)
+                        tile_img = Image.open(BytesIO(tile_data))
+                        if tile_img.mode != mode:
+                            tile_img = tile_img.convert(mode)
+                        return (tx, ty), tile_img
 
-                # 2. Fallback to single WEBP or PNG file
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        futures = [executor.submit(load_single_tile, name) for name in tile_names]
+                        for future in concurrent.futures.as_completed(futures):
+                            tx, ty = future.result()[0]
+                            tile_img = future.result()[1]
+                            tiles_dict[(tx, ty)] = tile_img
+                    return tiles_dict
+                
+                # Fallback to single WEBP or PNG file (v1)
+                single_img = None
                 if f"{base_name}.webp" in zip_ref.namelist():
-                    return Image.open(BytesIO(zip_ref.read(f"{base_name}.webp"))).convert(mode)
+                    single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.webp"))).convert(mode)
                 elif f"{base_name}.png" in zip_ref.namelist():
-                    return Image.open(BytesIO(zip_ref.read(f"{base_name}.png"))).convert(mode)
+                    single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.png"))).convert(mode)
+                
+                if single_img:
+                    # Manually slice it into 1024x1024 tiles
+                    w, h = single_img.size
+                    for ty in range(math.ceil(h/1024)):
+                        for tx in range(math.ceil(w/1024)):
+                            crop = single_img.crop((tx*1024, ty*1024, (tx+1)*1024, (ty+1)*1024))
+                            tiles_dict[(tx, ty)] = crop
+                    return tiles_dict
                 return None
 
-            canvas_state.image = load_img("canvas")
-            canvas_state.image_prev = load_img("canvas_prev")
-            canvas_state.image_now = load_img("canvas_now")
+            import math
+            canvas_state.tiles = load_tiles("canvas") or {}
+            canvas_state.tiles_prev = load_tiles("canvas_prev")
+            canvas_state.tiles_now = load_tiles("canvas_now")
+            canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
 
-            m_img = load_img("mask", is_mask=True)
+            # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
+            m_img = None
+            mask_tiles = load_tiles("mask")
+            if mask_tiles:
+                max_tx = max([tx for tx, ty in mask_tiles.keys()] + [0])
+                max_ty = max([ty for tx, ty in mask_tiles.keys()] + [0])
+                w = (max_tx + 1) * 1024
+                h = (max_ty + 1) * 1024
+                m_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                for (tx, ty), tile_img in mask_tiles.items():
+                    m_img.paste(tile_img, (tx * 1024, ty * 1024))
+                
             if m_img:
                 m_io = BytesIO()
                 m_img.save(m_io, format="WEBP", lossless=True, quality=100, method=0)
                 mask_b64 = "data:image/webp;base64," + base64.b64encode(m_io.getvalue()).decode('utf-8')
 
-        payload = json.dumps({
-            "type": "project_load",
-            "image": canvas_state.get_base64(),
-            "mask": mask_b64,
-            "meta": meta
-        })
-        print(f"[Infinite Canvas] Project loaded successfully (image: {len(canvas_state.get_base64())} bytes, mask: {len(mask_b64)} bytes)")
+        payload = canvas_state.get_tiles_payload()
+        payload["type"] = "project_load"
+        payload["viewport"] = meta.get("viewport", {})
+        payload["mask"] = mask_b64
+        
+        print(f"[Infinite Canvas] Project loaded successfully ({len(canvas_state.tiles)} tiles, mask: {len(mask_b64)} bytes)")
 
         return [
-            payload,
+            json.dumps(payload),
             gr.update(interactive=canvas_state.can_undo()),
             gr.update(interactive=canvas_state.can_redo()),
             meta.get("prompt", gr.skip()),

@@ -12,32 +12,49 @@
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
-        // Draw Image
-        if (bgImage.complete && bgImage.naturalWidth > 0) {
-            ctx.drawImage(bgImage, 0, 0);
+        // Draw Image Tiles
+        const TILE_SIZE = 1024;
+        if (window.ic_tiles) {
+            for (const key in window.ic_tiles) {
+                const [tx, ty] = key.split(',').map(Number);
+                const tileImg = window.ic_tiles[key];
+                if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                    ctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                }
+            }
         }
         
         const showOverlays = getShowOverlays();
         if (showOverlays) {
-            // Visualize pixel mask as red tint
+            // Visualize pixel mask as red tint using viewport-sized offscreen canvas
             if (maskDataCanvas.width > 0 && maskDataCanvas.height > 0) {
-                if (tintCanvas.width !== maskDataCanvas.width || tintCanvas.height !== maskDataCanvas.height) {
-                    tintCanvas.width = maskDataCanvas.width;
-                    tintCanvas.height = maskDataCanvas.height;
+                if (tintCanvas.width !== canvas.width || tintCanvas.height !== canvas.height) {
+                    tintCanvas.width = canvas.width;
+                    tintCanvas.height = canvas.height;
                 }
-                tintCtx.globalCompositeOperation = 'source-over';
-                tintCtx.fillStyle = 'rgba(255, 0, 0, 0.4)';
                 tintCtx.clearRect(0, 0, tintCanvas.width, tintCanvas.height);
-                tintCtx.fillRect(0, 0, tintCanvas.width, tintCanvas.height);
-                tintCtx.globalCompositeOperation = 'destination-in';
-                tintCtx.drawImage(maskDataCanvas, 0, 0);
                 
-                ctx.save();
+                tintCtx.save();
+                tintCtx.scale(dpr, dpr);
+                tintCtx.translate(offsetX, offsetY);
+                tintCtx.scale(scale, scale);
+                
                 const cx = sourceRect.x + sourceRect.w / 2;
                 const cy = sourceRect.y + sourceRect.h / 2;
-                ctx.translate(cx, cy);
-                ctx.rotate(sourceRect.angle || 0);
-                ctx.drawImage(tintCanvas, -sourceRect.w/2, -sourceRect.h/2, sourceRect.w, sourceRect.h);
+                tintCtx.translate(cx, cy);
+                tintCtx.rotate(sourceRect.angle || 0);
+                tintCtx.imageSmoothingEnabled = false;
+                tintCtx.drawImage(maskDataCanvas, -sourceRect.w/2, -sourceRect.h/2, sourceRect.w, sourceRect.h);
+                tintCtx.restore();
+                
+                tintCtx.globalCompositeOperation = 'source-in';
+                tintCtx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+                tintCtx.fillRect(0, 0, tintCanvas.width, tintCanvas.height);
+                tintCtx.globalCompositeOperation = 'source-over';
+                
+                ctx.save();
+                ctx.resetTransform();
+                ctx.drawImage(tintCanvas, 0, 0);
                 ctx.restore();
             }
             
