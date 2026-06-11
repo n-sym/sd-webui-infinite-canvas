@@ -22,6 +22,45 @@ workflowStyle.textContent = `
         border: 1px solid hsla(var(--node-hue), 45%, 40%, 0.5);
         box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
     }
+    
+    .ic-select {
+        width: 120px !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        background-color: var(--background-fill-primary, rgba(0,0,0,0.05)) !important;
+        border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important;
+        color: var(--body-text-color, #fff) !important;
+        padding: 6px 28px 6px 10px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        background-image: url('data:image/svg+xml;utf8,<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>') !important;
+        background-repeat: no-repeat !important;
+        background-position: right 10px center !important;
+        background-size: 10px !important;
+        box-shadow: inset 0 1px 2px rgba(255,255,255,0.05), 0 1px 3px rgba(0,0,0,0.05) !important;
+    }
+    
+    .ic-select:hover {
+        background-color: var(--background-fill-secondary, rgba(0,0,0,0.08)) !important;
+        border-color: var(--border-color-hover, rgba(128,128,128,0.4)) !important;
+    }
+    
+    .ic-select:focus {
+        outline: none !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+    }
+    
+    .dark .ic-select {
+        background-color: rgba(255,255,255,0.05) !important;
+    }
+    
+    .dark .ic-select:hover {
+        background-color: rgba(255,255,255,0.08) !important;
+    }
 `;
 document.head.appendChild(workflowStyle);
 
@@ -130,7 +169,7 @@ function updateWorkflowUI(data, container) {
                 const inputType = param.type === 'password' ? 'password' : 'text';
                 htmlChunk += `<input type="${inputType}" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" value="${val}" style="flex: 1; min-width: 0; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()" />`;
             } else if (param.type === 'enum') {
-                htmlChunk += `<select class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" style="width: 120px; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()">`;
+                htmlChunk += `<select class="ic-node-param ic-select" data-node-id="${plugin.id}" data-param-name="${param.name}" style="flex: 1; max-width: 140px; margin-left: 10px;" onchange="sendWorkflowUpdate()">`;
                 param.choices.forEach(c => {
                     htmlChunk += `<option value="${c}" ${c === val ? 'selected' : ''}>${c}</option>`;
                 });

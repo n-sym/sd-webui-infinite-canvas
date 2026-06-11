@@ -96,7 +96,12 @@ function t(enStr) {
         'Black': '全黑',
         'White': '全白',
         'Extend Edge': '扩展边缘',
-        'Edge Blur': '边缘模糊'
+        'Edge Blur': '边缘模糊',
+        'Hires Fix': '高清修复',
+        'Scale Factor': '放大倍率',
+        'Tile Overlap': '切块重叠',
+        'Denoising Strength': '重绘幅度',
+        'Steps': '独立步数'
     };
     return dict[enStr] || enStr;
 }

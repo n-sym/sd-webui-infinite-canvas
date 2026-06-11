@@ -233,6 +233,10 @@ class PrepareCanvasStep(GenerationStep):
         ctx.mask = prep_info['mask']
         ctx.paste_mask = prep_info.get('paste_mask', ctx.mask)
         ctx.canvas_source_rect = prep_info['canvas_source_rect']
+        
+        if prep_info.get('is_empty_canvas', False):
+            print("[Infinite Canvas] Blank canvas detected. Will use txt2img processing.")
+            
         return ctx
 
 
@@ -362,41 +366,68 @@ class SetupProcessingStep(GenerationStep):
     name = "Core: Setup SD"
     sort_index = 20
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        p = processing.StableDiffusionProcessingImg2Img(
-            sd_model=shared.sd_model,
-            outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples,
-            outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
-            prompt=ctx.prompt,
-            negative_prompt=ctx.negative_prompt,
-            styles=[],
-            seed=ctx.seed,
-            subseed=-1,
-            subseed_strength=0,
-            seed_resize_from_h=0,
-            seed_resize_from_w=0,
-            seed_enable_extras=False,
-            sampler_name=ctx.sampler_name,
-            scheduler=ctx.scheduler,
-            batch_size=1,
-            n_iter=1,
-            steps=ctx.steps,
-            cfg_scale=ctx.cfg_scale,
-            distilled_cfg_scale=ctx.shift,
-            width=ctx.gen_width,
-            height=ctx.gen_height,
-            restore_faces=False,
-            tiling=False,
-            init_images=[ctx.init_image],
-            mask=ctx.mask,
-            mask_blur=4,
-            inpainting_fill=ctx.inpainting_fill_idx,
-            resize_mode=0,
-            denoising_strength=ctx.denoising_strength,
-            image_cfg_scale=None,
-            inpaint_full_res=False,
-            inpaint_full_res_padding=0,
-            inpainting_mask_invert=0,
-        )
+        if ctx.prep_info.get('is_empty_canvas', False):
+            p = processing.StableDiffusionProcessingTxt2Img(
+                sd_model=shared.sd_model,
+                outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_txt2img_samples,
+                outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_txt2img_grids,
+                prompt=ctx.prompt,
+                negative_prompt=ctx.negative_prompt,
+                styles=[],
+                seed=ctx.seed,
+                subseed=-1,
+                subseed_strength=0,
+                seed_resize_from_h=0,
+                seed_resize_from_w=0,
+                seed_enable_extras=False,
+                sampler_name=ctx.sampler_name,
+                scheduler=ctx.scheduler,
+                batch_size=1,
+                n_iter=1,
+                steps=ctx.steps,
+                cfg_scale=ctx.cfg_scale,
+                distilled_cfg_scale=ctx.shift,
+                width=ctx.gen_width,
+                height=ctx.gen_height,
+                restore_faces=False,
+                tiling=False,
+            )
+        else:
+            p = processing.StableDiffusionProcessingImg2Img(
+                sd_model=shared.sd_model,
+                outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples,
+                outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
+                prompt=ctx.prompt,
+                negative_prompt=ctx.negative_prompt,
+                styles=[],
+                seed=ctx.seed,
+                subseed=-1,
+                subseed_strength=0,
+                seed_resize_from_h=0,
+                seed_resize_from_w=0,
+                seed_enable_extras=False,
+                sampler_name=ctx.sampler_name,
+                scheduler=ctx.scheduler,
+                batch_size=1,
+                n_iter=1,
+                steps=ctx.steps,
+                cfg_scale=ctx.cfg_scale,
+                distilled_cfg_scale=ctx.shift,
+                width=ctx.gen_width,
+                height=ctx.gen_height,
+                restore_faces=False,
+                tiling=False,
+                init_images=[ctx.init_image],
+                mask=ctx.mask,
+                mask_blur=4,
+                inpainting_fill=ctx.inpainting_fill_idx,
+                resize_mode=0,
+                denoising_strength=ctx.denoising_strength,
+                image_cfg_scale=None,
+                inpaint_full_res=False,
+                inpaint_full_res_padding=0,
+                inpainting_mask_invert=0,
+            )
         p.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
         p.extra_generation_params["IC Upscaler"] = ctx.upscaler_name
         p.extra_generation_params["IC Auto Scale"] = ctx.auto_scale
@@ -457,6 +488,69 @@ class LatentBlendStep(GenerationStep):
             
         return ctx
 
+class SecondPassStep(GenerationStep):
+    id = "second_pass"
+    name = "Hires Fix"
+    is_plugin = True
+    sort_index = 45
+    
+    @classmethod
+    def get_params(cls):
+        from modules import shared
+        return [
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "upscaler", "label": "Upscaler", "type": "enum", "choices": [x.name for x in shared.sd_upscalers], "default": shared.sd_upscalers[0].name if shared.sd_upscalers else "None"},
+            {"name": "scale_factor", "label": "Scale Factor", "type": "float", "default": 1.5, "min": 1.0, "max": 4.0, "step": 0.05},
+            {"name": "overlap", "label": "Tile Overlap", "type": "int", "default": 64, "min": 0, "max": 256, "step": 16},
+            {"name": "steps", "label": "Steps", "type": "int", "default": 15, "min": 1, "max": 100, "step": 1},
+            {"name": "denoising_strength", "label": "Denoising Strength", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0, "step": 0.01}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        from modules import shared
+        return {
+            "enabled": bool(raw_params.get("enabled", False)),
+            "upscaler": str(raw_params.get("upscaler", shared.sd_upscalers[0].name if shared.sd_upscalers else "None")),
+            "scale_factor": float(raw_params.get("scale_factor", 1.5)),
+            "overlap": int(raw_params.get("overlap", 64)),
+            "steps": int(raw_params.get("steps", 15)),
+            "denoising_strength": float(raw_params.get("denoising_strength", 0.35))
+        }
+
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        if not ctx.var.get("enabled", False):
+            return ctx
+            
+        from scripts.sd_upscale import SDUpscale
+        import copy
+        
+        # Clone processing object to avoid messing up the original params
+        p = copy.copy(ctx.p)
+        
+        # Configure new parameters
+        p.init_images = [ctx.result_img]
+        p.steps = ctx.var["steps"]
+        p.denoising_strength = ctx.var["denoising_strength"]
+        # Clear out mask because SD Upscale acts on the whole image (tiles)
+        p.mask = None
+        p.image_mask = None
+        
+        # Instantiate and run the built-in SD Upscale script
+        sd_upscale = SDUpscale()
+        
+        processed = sd_upscale.run(
+            p,
+            overlap=ctx.var["overlap"],
+            upscaler_index=ctx.var["upscaler"],
+            scale_factor=ctx.var["scale_factor"],
+            override=False
+        )
+        
+        if processed and processed.images:
+            ctx.result_img = processed.images[0]
+            
+        return ctx
 
 def ic_process_images(p, ctx):
     compile_preset = getattr(ctx, "compile_preset", "Disable")
@@ -692,6 +786,7 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
         SetupProcessingStep(),
         LatentBlendStep(),
         FirstPassStep(),
+        SecondPassStep(),
         EdgeFixStep(),
         FinalizeStateStep()
     ]
@@ -712,8 +807,48 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
                     power = ctx.step_params.get("edge_fix", {}).get("power", 1.0)
                     total_steps += max(1, int(ctx.steps * 0.2 * power))
                     
-            if step.id == "edge_fix":
+                if ctx.step_params.get("second_pass", {}).get("enabled", False):
+                    import math
+                    sp = ctx.step_params["second_pass"]
+                    scale_factor = sp.get("scale_factor", 1.5)
+                    overlap = sp.get("overlap", 64)
+                    upscale_steps = sp.get("steps", 15)
+                    
+                    upscaled_w = int(ctx.gen_width * scale_factor)
+                    upscaled_h = int(ctx.gen_height * scale_factor)
+                    
+                    # Compute tiles based on split_grid logic
+                    # WebUI's grid splits image into tiles of size gen_width/gen_height
+                    if upscaled_w > ctx.gen_width or upscaled_h > ctx.gen_height:
+                        non_overlap_w = ctx.gen_width - overlap
+                        non_overlap_h = ctx.gen_height - overlap
+                        cols = math.ceil((upscaled_w - overlap) / non_overlap_w) if non_overlap_w > 0 else 1
+                        rows = math.ceil((upscaled_h - overlap) / non_overlap_h) if non_overlap_h > 0 else 1
+                        cols = max(1, cols)
+                        rows = max(1, rows)
+                        num_tiles = cols * rows
+                    else:
+                        num_tiles = 1
+                        
+                    total_steps += num_tiles * upscale_steps
+                    
+            if step.id == "edge_fix" or step.id == "second_pass":
                 steps_accumulated += ctx.steps
+                if step.id == "edge_fix" and ctx.step_params.get("second_pass", {}).get("enabled", False):
+                    # add second pass tiles steps to accumulated
+                    sp = ctx.step_params["second_pass"]
+                    scale_factor = sp.get("scale_factor", 1.5)
+                    overlap = sp.get("overlap", 64)
+                    upscale_steps = sp.get("steps", 15)
+                    upscaled_w = int(ctx.gen_width * scale_factor)
+                    upscaled_h = int(ctx.gen_height * scale_factor)
+                    import math
+                    non_overlap_w = ctx.gen_width - overlap
+                    non_overlap_h = ctx.gen_height - overlap
+                    cols = math.ceil((upscaled_w - overlap) / non_overlap_w) if non_overlap_w > 0 else 1
+                    rows = math.ceil((upscaled_h - overlap) / non_overlap_h) if non_overlap_h > 0 else 1
+                    num_tiles = max(1, cols) * max(1, rows)
+                    steps_accumulated += (num_tiles * upscale_steps) - ctx.steps # replace ctx.steps with tile total
             
             # Update WebUI progress text
             hue = getattr(step, 'sort_index', 0) % 360
@@ -730,6 +865,11 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
     if ctx.is_error and ctx.error_message != "":
         return "", gr.update(), gr.update(), f"Error: {ctx.error_message}"
         
+    if getattr(shared.state, 'interrupted', False) or getattr(shared.state, 'skipped', False):
+        import json
+        payload = {"type": "generation_done", "tiles": []}
+        return json.dumps(payload), gr.update(), gr.update(), ""
+        
     if ctx.final_payload:
         return ctx.final_payload, gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo()), ""
         
@@ -741,8 +881,7 @@ def api_apply(feather_radius):
         feather = float(feather_radius)
         canvas_state.apply_pending_result(feather)
         payload = canvas_state.get_tiles_payload()
-        payload["type"] = "preview"
-        payload["is_discard"] = True
+        payload["type"] = "apply"
         return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
     except Exception as e:
         import traceback
@@ -1117,6 +1256,7 @@ def api_get_workflow():
         SetupProcessingStep,
         LatentBlendStep,
         FirstPassStep,
+        SecondPassStep,
         EdgeFixStep,
         FinalizeStateStep
     ]

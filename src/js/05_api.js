@@ -62,8 +62,31 @@
                 
                 window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7) + ")";
                 if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
-                // We removed requestProgress here to prevent WebUI from injecting its native progress bar.
-                // Our custom polling in 08_progress.js handles progress now.
+                let dummyProgressContainer = document.getElementById('ic-dummy-progress');
+                if (!dummyProgressContainer) {
+                    dummyProgressContainer = document.createElement('div');
+                    dummyProgressContainer.id = 'ic-dummy-progress';
+                    dummyProgressContainer.style.display = 'none';
+                    document.body.appendChild(dummyProgressContainer);
+                    
+                    let dummyInner = document.createElement('div');
+                    dummyInner.id = 'ic-dummy-inner';
+                    dummyProgressContainer.appendChild(dummyInner);
+                }
+
+                if (typeof requestProgress === 'function') {
+                    requestProgress(
+                        window.ic_current_task_id,
+                        document.getElementById("ic-dummy-inner"),
+                        null,
+                        function() {
+                            window.ic_current_task_id = null;
+                            const toast = document.getElementById('ic-progress-toast');
+                            if (toast) toast.style.display = 'none';
+                            if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", true);
+                        }
+                    );
+                }
                 setTimeout(() => document.getElementById('ic_trigger')?.click(), 100);
             }
         });

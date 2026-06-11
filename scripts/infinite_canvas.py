@@ -259,7 +259,7 @@ def on_ui_tabs():
                     _js="function(){ var args = Array.from(arguments); args[0] = window.ic_current_task_id || 'ic_task'; return args; }",
                     inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input, ic_compile_preset],
                     outputs=[payload_output, prev_btn, now_btn, html_info],
-                    show_progress=False
+                    show_progress=False 
                 ).success(
                     fn=make_dynamic('api_get_workflow'),
                     inputs=[],

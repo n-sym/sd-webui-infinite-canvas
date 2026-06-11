@@ -333,8 +333,11 @@ class CanvasState:
             
         # 3.5 Apply Edge Padding before resize (since resize drops alpha)
         alpha = None
+        is_empty_canvas = False
         if source_crop.mode == 'RGBA':
             alpha = source_crop.split()[3]
+            if alpha.getextrema()[1] == 0:
+                is_empty_canvas = True
             from PIL import ImageOps, ImageChops
             inverted_alpha = ImageOps.invert(alpha)
             
@@ -386,13 +389,18 @@ class CanvasState:
         mth = int(target_rect['h'] * model_scale)
         
         mask = Image.new("L", (final_sw, final_sh), "black")
+        from PIL import ImageDraw
         if mask_base64:
             import base64
             from io import BytesIO
             if "," in mask_base64:
                 mask_base64 = mask_base64.split(",")[1]
             user_mask = Image.open(BytesIO(base64.b64decode(mask_base64))).convert('L')
-            if mtw > 0 and mth > 0:
+            if user_mask.getextrema()[1] == 0:
+                # Mask is completely empty (all black), treat as no mask
+                draw = ImageDraw.Draw(mask)
+                draw.rectangle([mtx, mty, mtx+mtw, mty+mth], fill="white")
+            elif mtw > 0 and mth > 0:
                 user_mask = user_mask.resize((mtw, mth), Image.LANCZOS)
                 mask.paste(user_mask, (mtx, mty))
         else:
@@ -431,6 +439,7 @@ class CanvasState:
             'paste_mask': paste_mask,
             'canvas_source_rect': source_rect,
             'model_scale': model_scale,
+            'is_empty_canvas': is_empty_canvas,
             'transform': {
                 'scale': actual_canvas_scale,
                 'pad_left': pad_left,

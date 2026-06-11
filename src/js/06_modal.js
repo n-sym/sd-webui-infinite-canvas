@@ -359,7 +359,7 @@
                             sessionPreview.src = data.preview;
                             sessionModal.style.display = 'flex';
                         }
-                    } else if (data.type === 'session_restore' || data.type === 'session_clear' || data.type === 'session_cleared' || data.type === 'toggle' || data.type === 'upload' || data.type === 'discard') {
+                    } else if (data.type === 'session_restore' || data.type === 'session_clear' || data.type === 'session_cleared' || data.type === 'toggle' || data.type === 'upload' || data.type === 'discard' || data.type === 'apply') {
                         if (data.tiles) {
                             populateTiles(data.tiles);
                         }

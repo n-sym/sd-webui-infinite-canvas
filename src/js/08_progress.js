@@ -136,11 +136,14 @@ function _initICProgressRunner() {
             // Hide native progress bar globally inside our extension output
             const style = document.createElement('style');
             style.textContent = `
+                #ic-container .progress { display: none !important; }
+                #ic-container .progress-container { display: none !important; }
+                #ic-container .progressDiv { display: none !important; }
+                #ic-container .wrap { border: none !important; box-shadow: none !important; background: transparent !important; }
+                #ic-container .progress-text { display: none !important; }
                 #ic_output .progress { display: none !important; }
                 #ic_output .progress-container { display: none !important; }
                 #ic_output .progressDiv { display: none !important; }
-                #ic_output .wrap { border: none !important; box-shadow: none !important; background: transparent !important; }
-                #ic_output .progress-text { display: none !important; }
             `;
             document.head.appendChild(style);
             
