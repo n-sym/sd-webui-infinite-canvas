@@ -80,32 +80,58 @@ function updateWorkflowUI(data, container) {
         
         const pValues = stepParams[plugin.id] || {};
         
+        let isPluginEnabled = true;
+        const enabledParam = plugin.params.find(p => p.name === 'enabled');
+        if (enabledParam) {
+            isPluginEnabled = pValues['enabled'] !== undefined ? pValues['enabled'] : enabledParam.default;
+        }
+        
+        let enabledParamHtml = '';
+        let otherParamsHtml = '';
+        
         plugin.params.forEach(param => {
             const val = pValues[param.name] !== undefined ? pValues[param.name] : param.default;
             
-            settingsHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--body-text-color, #ccc);">`;
-            settingsHtml += `<span>${t(param.label)}</span>`;
+            let htmlChunk = `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--body-text-color, #ccc);">`;
+            htmlChunk += `<span>${t(param.label)}</span>`;
             
             if (param.type === 'bool') {
-                settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="sendWorkflowUpdate()" />`;
+                if (param.name === 'enabled') {
+                    htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="const wrap = document.getElementById('ic_plugin_params_${plugin.id}'); if(wrap) { wrap.style.maxHeight = this.checked ? '1000px' : '0px'; wrap.style.opacity = this.checked ? '1' : '0'; } sendWorkflowUpdate()" />`;
+                } else {
+                    htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="sendWorkflowUpdate()" />`;
+                }
             } else if (param.type === 'float' || param.type === 'int') {
-                settingsHtml += `<div style="display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; padding-left: 10px;">`;
-                settingsHtml += `<input type="range" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="flex: 1; min-width: 60px; max-width: 150px; cursor: pointer;" oninput="this.nextElementSibling.value=this.value" onchange="this.nextElementSibling.value=this.value; sendWorkflowUpdate()" />`;
-                settingsHtml += `<input type="number" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="width: 55px; text-align: center; font-family: monospace; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 2px; border-radius: 3px; outline: none;" oninput="this.previousElementSibling.value=this.value" onchange="sendWorkflowUpdate()" />`;
-                settingsHtml += `</div>`;
+                htmlChunk += `<div style="display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; padding-left: 10px;">`;
+                htmlChunk += `<input type="range" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="flex: 1; min-width: 60px; max-width: 150px; cursor: pointer;" oninput="this.nextElementSibling.value=this.value" onchange="this.nextElementSibling.value=this.value; sendWorkflowUpdate()" />`;
+                htmlChunk += `<input type="number" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="width: 55px; text-align: center; font-family: monospace; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 2px; border-radius: 3px; outline: none;" oninput="this.previousElementSibling.value=this.value" onchange="sendWorkflowUpdate()" />`;
+                htmlChunk += `</div>`;
             } else if (param.type === 'string' || param.type === 'password') {
                 const inputType = param.type === 'password' ? 'password' : 'text';
-                settingsHtml += `<input type="${inputType}" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" value="${val}" style="flex: 1; min-width: 0; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()" />`;
+                htmlChunk += `<input type="${inputType}" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" value="${val}" style="flex: 1; min-width: 0; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()" />`;
             } else if (param.type === 'enum') {
-                settingsHtml += `<select class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" style="width: 120px; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()">`;
+                htmlChunk += `<select class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" style="width: 120px; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()">`;
                 param.choices.forEach(c => {
-                    settingsHtml += `<option value="${c}" ${c === val ? 'selected' : ''}>${c}</option>`;
+                    htmlChunk += `<option value="${c}" ${c === val ? 'selected' : ''}>${c}</option>`;
                 });
-                settingsHtml += `</select>`;
+                htmlChunk += `</select>`;
             }
             
-            settingsHtml += `</div>`;
+            htmlChunk += `</div>`;
+            
+            if (param.name === 'enabled') {
+                enabledParamHtml += htmlChunk;
+            } else {
+                otherParamsHtml += htmlChunk;
+            }
         });
+        
+        settingsHtml += enabledParamHtml;
+        if (otherParamsHtml) {
+            settingsHtml += `<div id="ic_plugin_params_${plugin.id}" style="transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: hidden; max-height: ${isPluginEnabled ? '1000px' : '0px'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
+            settingsHtml += otherParamsHtml;
+            settingsHtml += `</div>`;
+        }
         settingsHtml += `</div>`;
     });
     settingsHtml += `</div>`;

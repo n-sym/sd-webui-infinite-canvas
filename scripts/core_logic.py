@@ -246,9 +246,9 @@ class LLMPromptOptimizeStep(GenerationStep):
     def get_params(cls):
         return [
             {"name": "enabled", "type": "bool", "label": "Enable", "default": False},
-            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.openai.com/v1/chat/completions"},
+            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.deepseek.com/chat/completions"},
             {"name": "api_key", "type": "password", "label": "API Key", "default": ""},
-            {"name": "model", "type": "string", "label": "Model Name", "default": "gpt-3.5-turbo"},
+            {"name": "model", "type": "string", "label": "Model Name", "default": "deepseek-v4-flash"},
             {"name": "prefix_tags", "type": "string", "label": "Prefix Tags", "default": "safe, year 2025, newest, masterpiece, best quality, score_9, score_8"},
             {"name": "character_tags", "type": "string", "label": "Character & Series", "default": ""},
             {"name": "style_tags", "type": "string", "label": "Artist & Style", "default": ""}
@@ -743,8 +743,10 @@ def reset_canvas():
 def toggle_state(state):
     if state == 'prev' and canvas_state.image_prev:
         canvas_state.image = canvas_state.image_prev.copy()
+        canvas_state.current_state = 'prev'
     elif state == 'now' and canvas_state.image_now:
         canvas_state.image = canvas_state.image_now.copy()
+        canvas_state.current_state = 'now'
     return json.dumps({"image": canvas_state.get_base64()}), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
 
 

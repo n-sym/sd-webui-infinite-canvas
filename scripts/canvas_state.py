@@ -51,8 +51,9 @@ class CanvasState:
         self.image_prev = None
         self.image_now = None
         self.pending_data = None
-        self.max_size = 4096  # Configurable max canvas size limit
+        self.max_size = 8192  # Configurable max canvas size limit
         self.is_dirty = False
+        self.current_state = 'now'
         self.workflow = []
         self.step_params = {}
 
@@ -106,12 +107,13 @@ class CanvasState:
         self.image = image.convert("RGBA")
         self.image_prev = None
         self.image_now = None
+        self.current_state = 'now'
 
     def can_undo(self):
-        return self.image_prev is not None
+        return self.image_prev is not None and self.current_state != 'prev'
 
     def can_redo(self):
-        return self.image_now is not None
+        return self.image_now is not None and self.current_state != 'now'
 
     def _pad_to_include(self, rect):
         """
@@ -444,6 +446,7 @@ class CanvasState:
         self.image_now = self.image.copy()
         self.pending_data = None
         self.is_dirty = True
+        self.current_state = 'now'
 
     def discard_pending_result(self):
         self.pending_data = None
