@@ -20,3 +20,36 @@
 #ic_payload, #ic_output, #ic_trigger, #ic_html_info {
     display: none !important;
 }
+
+/* Custom styling for dynamic workflow node parameter checkboxes */
+input.ic-node-param[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-color-primary, #ccc);
+    border-radius: 4px;
+    background-color: transparent;
+    cursor: pointer;
+    position: relative;
+    outline: none;
+    transition: all 0.2s ease-in-out;
+    margin: 0;
+}
+
+input.ic-node-param[type="checkbox"]:checked {
+    background-color: var(--color-accent, #f97316);
+    border-color: var(--color-accent, #f97316);
+}
+
+input.ic-node-param[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 4px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}

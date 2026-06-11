@@ -24,6 +24,25 @@ function t(enStr) {
         'Project Name': '工程名称',
         'Save Project': '保存工程',
         'Load Project': '读取工程',
+        'Plugin Settings': '插件设置',
+        'LLM Prompt Optimizer': 'LLM 提示词优化',
+        'Enable': '启用',
+        'API URL': 'API 地址',
+        'API Key': 'API 密钥',
+        'Model Name': '模型名称',
+        'Prefix Tags': '前驱标签',
+        'Character & Series': '角色与出处',
+        'Artist & Style': '画师与风格',
+        'Pipeline Nodes': '执行节点',
+        'Latent Edge Blend': '潜空间边缘融合',
+        'Blend Power': '融合强度',
+        'Edge Fix Post-Process': '边缘二次修复',
+        'Fix Power': '修复强度',
+        'Append Close-Up': '末尾追加 close-up',
+        'Core: Prep Canvas': 'Core: 画布预处理',
+        'Core: Setup SD': 'Core: 设置 SD',
+        'Core: Generation': 'Core: 图像生成',
+        'Core: Finalize': 'Core: 结束',
         'Mask Tool': '蒙版工具',
         'Show Overlays': '显示覆盖层',
         'Auto Scale Canvas': '自动缩放画布',
@@ -76,7 +95,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     function translateGradio() {
         if (!isZh) return;
-        const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
+        const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_accordion_workflow', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {

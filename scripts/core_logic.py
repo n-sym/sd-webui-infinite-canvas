@@ -2,13 +2,16 @@ import os
 import json
 import base64
 import torch
-import cv2
 import numpy as np
+import cv2
 import concurrent.futures
 import zipfile
 import re
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter
+from typing import Any, Optional, Dict
+from dataclasses import dataclass, field
+import traceback
 import gradio as gr
 from modules import processing, shared, scripts
 from modules.torch_utils import float64
@@ -84,247 +87,593 @@ class ICLatentBlendScript(scripts.Script):
 
 
 
-def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo, edge_fix, edge_fix_power, latent_blend, latent_blend_power):
-    edge_fix_power = float(edge_fix_power) if edge_fix_power is not None else 1.0
-    latent_blend_power = float(latent_blend_power) if latent_blend_power is not None else 1.0
-    global sam2_model
-    if sam2_model is not None:
-        print("[Infinite Canvas] Freeing SAM 2 model to save VRAM for generation...")
-        del sam2_model
-        sam2_model = None
-        import gc
-        gc.collect()
-        try:
-            from modules import devices
-            devices.torch_gc()
-        except:
-            pass
+@dataclass
+class GenerationCtx:
+    # 1. Original Inputs
+    id_task: str = ""
+    payload_json: str = ""
+    prompt: str = ""
+    negative_prompt: str = ""
+    steps: int = 20
+    cfg_scale: float = 7.0
+    shift: float = 3.0
+    denoising_strength: float = 0.6
+    sampler_name: str = "Euler a"
+    scheduler: str = "Automatic"
+    gen_width: int = 1024
+    gen_height: int = 1024
+    seed: int = -1
+    inpainting_fill_idx: int = 1
+    outpaint_pad: str = "Black"
+    upscaler_name: str = "None"
+    auto_scale: bool = False
+    downscale_algo: str = "Bicubic"
 
-    try:
-        data = json.loads(payload_json)
-        source_rect = data['source_rect']
-        target_rect = data['target_rect']
-        mask_base64 = data.get('mask_base64', '')
-        seed = int(seed) if seed is not None else -1
-        shift = float(shift) if shift is not None else 3.0
-        gen_width = int(gen_width) if gen_width is not None else 1024
-        gen_height = int(gen_height) if gen_height is not None else 1024
-        inpainting_fill_idx = int(inpainting_fill_idx) if inpainting_fill_idx is not None else 1
-        outpaint_pad = str(outpaint_pad) if outpaint_pad is not None else "全黑 (Black)"
-        auto_scale = bool(auto_scale)
-        edge_fix = bool(edge_fix)
+    # Dictionary-driven namespace for modules
+    step_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    var: Dict[str, Any] = field(default_factory=dict)  # Injected during pipeline loop
+
+    # 2. Extracted from Payload
+    source_rect: Dict = field(default_factory=dict)
+    target_rect: Dict = field(default_factory=dict)
+    mask_base64: str = ""
+
+    # 3. Canvas Prep
+    generation_res: int = 1024
+    init_image: Optional[Any] = None
+    mask: Optional[Any] = None
+    paste_mask: Optional[Any] = None
+    canvas_source_rect: Dict = field(default_factory=dict)
+    prep_info: Dict = field(default_factory=dict)
+
+    # 4. Processing Object (A1111)
+    p: Optional[Any] = None
+
+    # 5. Intermediate/Final Masks & Images
+    mask_gen_size_arr: Optional[Any] = None
+    symmetric_soft_mask_arr: Optional[Any] = None
+    result_img: Optional[Any] = None
+    blured_edge_mask_arr: Optional[Any] = None
+    actual_mask_arr: Optional[Any] = None
+    hard_edge_mask_arr: Optional[Any] = None
+
+    # 6. Outputs
+    final_payload: str = ""
+    is_error: bool = False
+    error_message: str = ""
+
+
+class GenerationStep:
+    id: str = "base_step"
+    name: str = "Base Step"
+    is_plugin: bool = False
+    sort_index: int = 500
+    
+    @classmethod
+    def get_params(cls) -> list[Dict[str, Any]]:
+        return []
         
-        # Prepare the canvas
-        generation_res = max(gen_width, gen_height)
-        prep_info = canvas_state.prepare_generation(source_rect, target_rect, generation_res=generation_res, upscaler_name=upscaler_name, mask_base64=mask_base64, auto_scale=auto_scale, outpaint_pad=outpaint_pad)
-        if not prep_info:
-            return json.dumps({"image": canvas_state.get_base64()}), ""
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return raw_params
+
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        return ctx
+
+
+class ParseInputStep(GenerationStep):
+    id = "parse_input"
+    sort_index = 0
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        global sam2_model
+        if sam2_model is not None:
+            print("[Infinite Canvas] Freeing SAM 2 model to save VRAM for generation...")
+            del sam2_model
+            sam2_model = None
+            import gc
+            gc.collect()
+            try:
+                from modules import devices
+                devices.torch_gc()
+            except:
+                pass
+
+        data = json.loads(ctx.payload_json)
+        ctx.source_rect = data.get('source_rect', {})
+        ctx.target_rect = data.get('target_rect', {})
+        ctx.mask_base64 = data.get('mask_base64', '')
+        
+        ctx.seed = int(ctx.seed) if ctx.seed is not None else -1
+        ctx.shift = float(ctx.shift) if ctx.shift is not None else 3.0
+        ctx.gen_width = int(ctx.gen_width) if ctx.gen_width is not None else 1024
+        ctx.gen_height = int(ctx.gen_height) if ctx.gen_height is not None else 1024
+        ctx.inpainting_fill_idx = int(ctx.inpainting_fill_idx) if ctx.inpainting_fill_idx is not None else 1
+        ctx.outpaint_pad = str(ctx.outpaint_pad) if ctx.outpaint_pad is not None else "Black"
+        ctx.auto_scale = bool(ctx.auto_scale)
+        
+        ctx.generation_res = max(ctx.gen_width, ctx.gen_height)
+        
+        ctx.workflow = data.get("workflow", [])
+        payload_step_params = data.get("step_params", {})
+        
+        plugins = [cls for cls in GenerationStep.__subclasses__() if getattr(cls, 'is_plugin', False)]
+        
+        for plugin_cls in plugins:
+            if plugin_cls.id in payload_step_params:
+                resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
+                if plugin_cls.id not in ctx.step_params:
+                    ctx.step_params[plugin_cls.id] = {}
+                ctx.step_params[plugin_cls.id].update(resolved)
             
-        init_image = prep_info['image']
-        mask = prep_info['mask']
-        paste_mask = prep_info.get('paste_mask', mask)
-        canvas_source_rect = prep_info['canvas_source_rect']
+        canvas_state.update_workflow(ctx.workflow, ctx.step_params)
         
-        # Call processing
+        return ctx
+
+
+class PrepareCanvasStep(GenerationStep):
+    id = "prepare_canvas"
+    name = "Core: Prep Canvas"
+    sort_index = 10
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        prep_info = canvas_state.prepare_generation(
+            ctx.source_rect, ctx.target_rect, 
+            generation_res=ctx.generation_res, 
+            upscaler_name=ctx.upscaler_name, 
+            mask_base64=ctx.mask_base64, 
+            auto_scale=ctx.auto_scale, 
+            outpaint_pad=ctx.outpaint_pad
+        )
+        if not prep_info:
+            ctx.final_payload = json.dumps({"image": canvas_state.get_base64()})
+            ctx.is_error = True # Stop pipeline without throwing an error
+            return ctx
+            
+        ctx.prep_info = prep_info
+        ctx.init_image = prep_info['image']
+        ctx.mask = prep_info['mask']
+        ctx.paste_mask = prep_info.get('paste_mask', ctx.mask)
+        ctx.canvas_source_rect = prep_info['canvas_source_rect']
+        return ctx
+
+
+class LLMPromptOptimizeStep(GenerationStep):
+    id = "llm_prompt_optimizer"
+    name = "LLM Prompt Optimizer"
+    is_plugin = True
+    sort_index = 15
+    
+    @classmethod
+    def get_params(cls):
+        return [
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False},
+            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.openai.com/v1/chat/completions"},
+            {"name": "api_key", "type": "password", "label": "API Key", "default": ""},
+            {"name": "model", "type": "string", "label": "Model Name", "default": "gpt-3.5-turbo"},
+            {"name": "prefix_tags", "type": "string", "label": "Prefix Tags", "default": "safe, year 2025, newest, masterpiece, best quality, score_9, score_8"},
+            {"name": "character_tags", "type": "string", "label": "Character & Series", "default": ""},
+            {"name": "style_tags", "type": "string", "label": "Artist & Style", "default": ""}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "enabled": bool(raw_params.get("enabled", False)),
+            "api_url": str(raw_params.get("api_url", "https://api.openai.com/v1/chat/completions")),
+            "api_key": str(raw_params.get("api_key", "")),
+            "model": str(raw_params.get("model", "gpt-3.5-turbo")),
+            "prefix_tags": str(raw_params.get("prefix_tags", "safe, year 2025, newest, masterpiece, best quality, score_9, score_8")),
+            "character_tags": str(raw_params.get("character_tags", "")),
+            "style_tags": str(raw_params.get("style_tags", ""))
+        }
+        
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        is_enabled = ctx.var.get("enabled", False)
+        if not is_enabled or not ctx.prompt:
+            return ctx
+            
+        import re
+        import requests
+        
+        # Extract and remove LoRAs
+        loras = re.findall(r'<lora:[^>]+>', ctx.prompt)
+        content_prompt = re.sub(r'<lora:[^>]+>', '', ctx.prompt).strip()
+        
+        # Optimize content
+        api_url = ctx.var.get("api_url", "")
+        api_key = ctx.var.get("api_key", "")
+        model = ctx.var.get("model", "")
+        optimized_content = content_prompt
+        
+        if api_key and content_prompt:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            char_tags = ctx.var.get("character_tags", "")
+            style_tags = ctx.var.get("style_tags", "")
+            
+            system_prompt = f"""Enhance the user's text into a comma-separated list of highly detailed stable diffusion tags. Reply ONLY with the tags.
+CRITICAL RULES:
+1. DO NOT add any quality tags (e.g., masterpiece, best quality, highres).
+2. DO NOT add "close-up" unless the user explicitly asks for it.
+3. The following character and style tags will be automatically combined with your output. DO NOT copy or include them in your output, just use them as context for your generation:
+[Context - Characters]: {char_tags if char_tags else 'None'}
+[Context - Style]: {style_tags if style_tags else 'None'}
+"""
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": content_prompt}
+                ]
+            }
+            try:
+                print(f"[LLM Optimizer] Sending to LLM: {content_prompt}")
+                response = requests.post(api_url, headers=headers, json=payload, timeout=15)
+                response.raise_for_status()
+                optimized_content = response.json()['choices'][0]['message']['content'].strip()
+                print(f"[LLM Optimizer] Received optimized: {optimized_content}")
+            except Exception as e:
+                print(f"[LLM Optimizer] Failed to optimize: {e}")
+        
+        # Reconstruct final prompt
+        parts = []
+        for p in [ctx.var.get("prefix_tags", ""), ctx.var.get("character_tags", ""), ctx.var.get("style_tags", ""), optimized_content]:
+            p = p.strip()
+            if p:
+                parts.append(p)
+                
+        final_prompt = ", ".join(parts)
+        if loras:
+            final_prompt += " " + " ".join(loras)
+            
+        ctx.prompt = final_prompt
+        return ctx
+
+
+class AppendCloseUpStep(GenerationStep):
+    id = "append_close_up"
+    name = "Append Close-Up"
+    is_plugin = True
+    sort_index = 18
+    
+    @classmethod
+    def get_params(cls):
+        return [
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "enabled": bool(raw_params.get("enabled", False))
+        }
+        
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        is_enabled = ctx.var.get("enabled", False)
+        if is_enabled and ctx.prompt:
+            ctx.prompt = ctx.prompt.rstrip()
+            if not ctx.prompt.endswith(","):
+                ctx.prompt += ","
+            ctx.prompt += " close-up"
+            print(f"[Append Close-Up] Appended to prompt: {ctx.prompt}")
+        return ctx
+
+
+class SetupProcessingStep(GenerationStep):
+    id = "setup_processing"
+    name = "Core: Setup SD"
+    sort_index = 20
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         p = processing.StableDiffusionProcessingImg2Img(
             sd_model=shared.sd_model,
             outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples,
             outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
+            prompt=ctx.prompt,
+            negative_prompt=ctx.negative_prompt,
             styles=[],
-            seed=seed,
+            seed=ctx.seed,
             subseed=-1,
             subseed_strength=0,
             seed_resize_from_h=0,
             seed_resize_from_w=0,
             seed_enable_extras=False,
-            sampler_name=sampler_name,
-            scheduler=scheduler,
+            sampler_name=ctx.sampler_name,
+            scheduler=ctx.scheduler,
             batch_size=1,
             n_iter=1,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            distilled_cfg_scale=shift,
-            width=gen_width,
-            height=gen_height,
+            steps=ctx.steps,
+            cfg_scale=ctx.cfg_scale,
+            distilled_cfg_scale=ctx.shift,
+            width=ctx.gen_width,
+            height=ctx.gen_height,
             restore_faces=False,
             tiling=False,
-            init_images=[init_image],
-            mask=mask,
+            init_images=[ctx.init_image],
+            mask=ctx.mask,
             mask_blur=4,
-            inpainting_fill=inpainting_fill_idx, # Expose user choice
+            inpainting_fill=ctx.inpainting_fill_idx,
             resize_mode=0,
-            denoising_strength=denoising_strength,
+            denoising_strength=ctx.denoising_strength,
             image_cfg_scale=None,
-            inpaint_full_res=False, # We already cropped it manually
+            inpaint_full_res=False,
             inpaint_full_res_padding=0,
             inpainting_mask_invert=0,
         )
-        p.script_args = (float(latent_blend_power), )
-        p.extra_generation_params["IC Upscaler"] = upscaler_name
-        p.extra_generation_params["IC Auto Scale"] = auto_scale
+        p.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
+        p.extra_generation_params["IC Upscaler"] = ctx.upscaler_name
+        p.extra_generation_params["IC Auto Scale"] = ctx.auto_scale
+        ctx.p = p
         
-        # Prepare edge masks if either feature is requested
-        if edge_fix or latent_blend:
-            import cv2
-            import numpy as np
-            edge_radius = max(1, int(max(gen_width, gen_height) * 0.025))
-            mask_gen_size_arr = cv2.resize(np.array(mask), (gen_width, gen_height), interpolation=cv2.INTER_NEAREST)
+        # Prepare edge masks
+        edge_fix_params = ctx.step_params.get("edge_fix", {})
+        latent_blend_params = ctx.step_params.get("latent_blend", {})
+        if edge_fix_params.get("enabled", False) or latent_blend_params.get("enabled", False):
+            ctx.mask_gen_size_arr = cv2.resize(np.array(ctx.mask), (ctx.gen_width, ctx.gen_height), interpolation=cv2.INTER_NEAREST)
             
-            if latent_blend:
-                # Create a symmetric softly feathered mask for Latent Blend
-                ksize = int(edge_radius) * 2 + 1
-                symmetric_soft_mask_arr = cv2.GaussianBlur(mask_gen_size_arr, (ksize, ksize), 0)
-                
-                p.image_mask = Image.fromarray(symmetric_soft_mask_arr)
-                p.mask_round = False # CRITICAL: prevent A1111 from destroying the soft edges
-                p.ic_latent_blend_active = True
-                ic_script = ICLatentBlendScript()
-                ic_script.args_from = len(p.script_args)
-                ic_script.args_to = len(p.script_args)
-                if getattr(p, "scripts", None) is not None and getattr(p.scripts, "alwayson_scripts", None) is not None:
-                    p.scripts.alwayson_scripts.append(ic_script)
-                elif getattr(p, "scripts", None) is None:
-                    from modules.scripts import ScriptRunner
-                    p.scripts = ScriptRunner()
-                    p.scripts.alwayson_scripts = [ic_script]
-        
-        processed = processing.process_images(p)
-        
-        if processed.images:
-            result_img = processed.images[0]
-            original_paste_mask_arr = np.array(paste_mask.convert("L"))
-            
-            if latent_blend and not edge_fix:
-                symmetric_soft_mask_resized = cv2.resize(symmetric_soft_mask_arr, paste_mask.size, interpolation=cv2.INTER_LINEAR)
-                paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_resized)
-                paste_mask_arr[paste_mask_arr > 0] = 255
-                paste_mask = Image.fromarray(paste_mask_arr)
+        return ctx
 
-            if edge_fix:
-                import cv2
-                import numpy as np
-                from modules import images as a1111_images
-                
-                # 1. Delta calculation
-                # Use A1111's exact resize algorithm so the diff is pixel-perfect
-                img_in_resized = a1111_images.resize_image(0, p.init_images[0], gen_width, gen_height)
-                img_in_arr = np.array(img_in_resized).astype(np.int32)
-                
-                img_out_arr = np.array(result_img).astype(np.int32)
-                
-                delta = np.abs(img_out_arr - img_in_arr)
-                delta_max = np.max(delta, axis=2)
-                
-                # Binarize
-                delta_mask = (delta_max > 5).astype(np.uint8) * 255
-                
-                # Morphological operations
-                kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-                kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-                
-                delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_OPEN, kernel_open)
-                delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_CLOSE, kernel_close)
-                
-                # Intersect with safe expanded mask bounding box
-                safe_mask = cv2.dilate(mask_gen_size_arr, np.ones((int(edge_radius)*2+1, int(edge_radius)*2+1), np.uint8))
-                actual_mask_arr = cv2.bitwise_and(delta_mask, safe_mask)
-                
-                if np.max(actual_mask_arr) == 0:
-                    # Nothing changed in Pass 1, so there is no edge to fix!
-                    blured_edge_mask_arr = np.zeros((gen_height, gen_width), dtype=np.uint8)
-                    hard_edge_mask_arr = np.zeros((gen_height, gen_width), dtype=np.uint8)
-                else:
-                    # 2. Distance transform
-                    down_factor = 4
-                    small_w = max(1, gen_width // down_factor)
-                    small_h = max(1, gen_height // down_factor)
-                    small_actual = cv2.resize(actual_mask_arr, (small_w, small_h), interpolation=cv2.INTER_NEAREST)
-                    
-                    dist_in_eff = cv2.distanceTransform(small_actual, cv2.DIST_L2, 3)
-                    dist_out_eff = cv2.distanceTransform(cv2.bitwise_not(small_actual), cv2.DIST_L2, 3)
-                    dist_to_edge = (dist_in_eff + dist_out_eff) * down_factor
-                    
-                    sigma = max(1, edge_radius / 3.0)
-                    edge_mask_float = np.exp(- (dist_to_edge**2) / (2 * sigma**2))
-                    edge_mask_dist_arr = (edge_mask_float * 255).astype(np.uint8)
-                    
-                    large_edge_mask = cv2.resize(edge_mask_dist_arr, (gen_width, gen_height), interpolation=cv2.INTER_LINEAR)
-                    
-                    # Apply multiple passes of a large blur to create an ultra-soft alpha transition
-                    blur_k = int(edge_radius) * 2 + 1
-                    if blur_k % 2 == 0: blur_k += 1
-                    blured_edge_mask_arr = cv2.GaussianBlur(large_edge_mask, (blur_k, blur_k), 0)
-                    blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
-                    blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
-                    
-                    hard_edge_mask_arr = np.copy(blured_edge_mask_arr)
-                    hard_edge_mask_arr[hard_edge_mask_arr > 0] = 255
-                    
-                    hard_edge_mask = Image.fromarray(hard_edge_mask_arr)
-                    
-                    p2 = processing.StableDiffusionProcessingImg2Img(
-                        sd_model=shared.sd_model, outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples, outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
-                        prompt=prompt, negative_prompt=negative_prompt, seed=seed, subseed=-1, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, seed_enable_extras=False,
-                        sampler_name=sampler_name, scheduler=scheduler, batch_size=1, n_iter=1, steps=max(1, int(steps * 0.2 * edge_fix_power)),
-                        cfg_scale=cfg_scale, distilled_cfg_scale=shift, width=gen_width, height=gen_height, restore_faces=False, tiling=False,
-                        init_images=[result_img], mask=hard_edge_mask, mask_blur=4, inpainting_fill=inpainting_fill_idx, resize_mode=0,
-                        denoising_strength=(- (denoising_strength ** 2) / (2 * edge_fix_power) + denoising_strength), image_cfg_scale=None, inpaint_full_res=False, inpaint_full_res_padding=0, inpainting_mask_invert=0
-                    )
-                    p2.script_args = (float(latent_blend_power), )
-                    
-                    processed2 = processing.process_images(p2)
-                    if processed2.images:
-                        inpaint_image_2 = processed2.images[0]
-                        base_arr = np.array(result_img).astype(np.float32)
-                        new_arr = np.array(inpaint_image_2).astype(np.float32)
-                        alpha = (blured_edge_mask_arr / 255.0)[:, :, np.newaxis]
-                        final_blended_arr = base_arr * (1.0 - alpha) + new_arr * alpha
-                        result_img = Image.fromarray(final_blended_arr.astype(np.uint8))
-                
-                actual_mask_resized = cv2.resize(actual_mask_arr, paste_mask.size, interpolation=cv2.INTER_NEAREST)
-                hard_edge_mask_resized = cv2.resize(hard_edge_mask_arr, paste_mask.size, interpolation=cv2.INTER_LINEAR)
-                paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_resized, hard_edge_mask_resized))
-                paste_mask_arr[paste_mask_arr > 0] = 255
-                paste_mask = Image.fromarray(paste_mask_arr)
-            
-            # Defer pasting - save to pending state
-            edge_fix_mask_img = Image.fromarray(blured_edge_mask_arr) if edge_fix and 'blured_edge_mask_arr' in locals() else None
-            canvas_state.set_pending_result(result_img, canvas_source_rect, paste_mask, downscale_algo, edge_fix_mask=edge_fix_mask_img)
-            
-            def to_b64(img):
-                buffered = BytesIO()
-                img.save(buffered, format="PNG", compress_level=1)
-                return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
-                
-            patch_b64 = to_b64(canvas_state.pending_data['patch'])
-            mask_b64 = to_b64(canvas_state.pending_data['mask_rgba'])
-            edge_mask_b64 = to_b64(canvas_state.pending_data['edge_mask_rgba']) if 'edge_mask_rgba' in canvas_state.pending_data else None
-            
-            payload = {
-                "type": "preview",
-                "image": canvas_state.get_base64(), # The base canvas (might have been padded/scaled)
-                "patch": patch_b64,
-                "mask": mask_b64,
-                "transform": {
-                    "scale": prep_info['transform']['scale'],
-                    "pad_left": prep_info['transform']['pad_left'],
-                    "pad_top": prep_info['transform']['pad_top'],
-                    "rect_x": canvas_source_rect['x'],
-                    "rect_y": canvas_source_rect['y']
-                }
-            }
-            if edge_mask_b64:
-                payload["edge_mask"] = edge_mask_b64
-                
-            return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo()), ""
-            
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return "", gr.update(), gr.update(), f"Error: {str(e)}"
+
+class LatentBlendStep(GenerationStep):
+    id = "latent_blend"
+    name = "Latent Edge Blend"
+    is_plugin = True
+    sort_index = 30
     
+    @classmethod
+    def get_params(cls):
+        return [
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "power", "label": "Blend Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "enabled": bool(raw_params.get("enabled", False)),
+            "power": float(raw_params.get("power", 1.0))
+        }
+
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        if not ctx.var.get("enabled", False):
+            return ctx
+            
+        blend_power = ctx.var.get("power", 1.0)
+        ctx.latent_blend_power = blend_power  # sync for later scripts
+        
+        edge_radius = max(1, int(max(ctx.gen_width, ctx.gen_height) * 0.025))
+        ksize = int(edge_radius) * 2 + 1
+        ctx.symmetric_soft_mask_arr = cv2.GaussianBlur(ctx.mask_gen_size_arr, (ksize, ksize), 0)
+        
+        ctx.p.image_mask = Image.fromarray(ctx.symmetric_soft_mask_arr)
+        ctx.p.mask_round = False
+        ctx.p.ic_latent_blend_active = True
+        ic_script = ICLatentBlendScript()
+        ic_script.args_from = len(ctx.p.script_args)
+        ic_script.args_to = len(ctx.p.script_args)
+        if getattr(ctx.p, "scripts", None) is not None and getattr(ctx.p.scripts, "alwayson_scripts", None) is not None:
+            ctx.p.scripts.alwayson_scripts.append(ic_script)
+        elif getattr(ctx.p, "scripts", None) is None:
+            from modules.scripts import ScriptRunner
+            ctx.p.scripts = ScriptRunner()
+            ctx.p.scripts.alwayson_scripts = [ic_script]
+            
+        return ctx
+
+
+class FirstPassStep(GenerationStep):
+    id = "first_pass"
+    name = "Core: Generation"
+    sort_index = 100
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        processed = processing.process_images(ctx.p)
+        if processed.images:
+            ctx.result_img = processed.images[0]
+        else:
+            ctx.is_error = True
+            ctx.error_message = "No images returned from first pass."
+        return ctx
+
+
+class EdgeFixStep(GenerationStep):
+    id = "edge_fix"
+    name = "Edge Fix Post-Process"
+    is_plugin = True
+    sort_index = 110
+    
+    @classmethod
+    def get_params(cls):
+        return [
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "power", "label": "Fix Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.5, "step": 0.01}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "enabled": bool(raw_params.get("enabled", False)),
+            "power": float(raw_params.get("power", 1.0))
+        }
+
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        is_enabled = ctx.var.get("enabled", False)
+        power = ctx.var.get("power", 1.0)
+        
+        # Post-processing steps
+        if not ctx.result_img or ctx.mask_gen_size_arr is None:
+            return ctx
+            
+        lb_params = ctx.step_params.get("latent_blend", {})
+        lb_enabled = lb_params.get("enabled", False)
+
+        original_paste_mask_arr = np.array(ctx.paste_mask.convert("L"))
+        
+        if lb_enabled and not is_enabled:
+            symmetric_soft_mask_resized = cv2.resize(ctx.symmetric_soft_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_LINEAR)
+            paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_resized)
+            paste_mask_arr[paste_mask_arr > 0] = 255
+            ctx.paste_mask = Image.fromarray(paste_mask_arr)
+            return ctx
+            
+        if not is_enabled:
+            return ctx
+
+        ctx.edge_fix_power = power # sync
+
+        from modules import images as a1111_images
+        edge_radius = max(1, int(max(ctx.gen_width, ctx.gen_height) * 0.025))
+        
+        img_in_resized = a1111_images.resize_image(0, ctx.p.init_images[0], ctx.gen_width, ctx.gen_height)
+        img_in_arr = np.array(img_in_resized).astype(np.int32)
+        img_out_arr = np.array(ctx.result_img).astype(np.int32)
+        
+        delta = np.abs(img_out_arr - img_in_arr)
+        delta_max = np.max(delta, axis=2)
+        delta_mask = (delta_max > 5).astype(np.uint8) * 255
+        
+        kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_OPEN, kernel_open)
+        delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_CLOSE, kernel_close)
+        
+        safe_mask = cv2.dilate(ctx.mask_gen_size_arr, np.ones((int(edge_radius)*2+1, int(edge_radius)*2+1), np.uint8))
+        actual_mask_arr = cv2.bitwise_and(delta_mask, safe_mask)
+        
+        if np.max(actual_mask_arr) == 0:
+            ctx.blured_edge_mask_arr = np.zeros((ctx.gen_height, ctx.gen_width), dtype=np.uint8)
+            ctx.hard_edge_mask_arr = np.zeros((ctx.gen_height, ctx.gen_width), dtype=np.uint8)
+        else:
+            down_factor = 4
+            small_w = max(1, ctx.gen_width // down_factor)
+            small_h = max(1, ctx.gen_height // down_factor)
+            small_actual = cv2.resize(actual_mask_arr, (small_w, small_h), interpolation=cv2.INTER_NEAREST)
+            
+            dist_in_eff = cv2.distanceTransform(small_actual, cv2.DIST_L2, 3)
+            dist_out_eff = cv2.distanceTransform(cv2.bitwise_not(small_actual), cv2.DIST_L2, 3)
+            dist_to_edge = (dist_in_eff + dist_out_eff) * down_factor
+            
+            sigma = max(1, edge_radius / 3.0)
+            edge_mask_float = np.exp(- (dist_to_edge**2) / (2 * sigma**2))
+            edge_mask_dist_arr = (edge_mask_float * 255).astype(np.uint8)
+            
+            large_edge_mask = cv2.resize(edge_mask_dist_arr, (ctx.gen_width, ctx.gen_height), interpolation=cv2.INTER_LINEAR)
+            
+            blur_k = int(edge_radius) * 2 + 1
+            if blur_k % 2 == 0: blur_k += 1
+            blured_edge_mask_arr = cv2.GaussianBlur(large_edge_mask, (blur_k, blur_k), 0)
+            blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
+            ctx.blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
+            
+            ctx.hard_edge_mask_arr = np.copy(ctx.blured_edge_mask_arr)
+            ctx.hard_edge_mask_arr[ctx.hard_edge_mask_arr > 0] = 255
+            hard_edge_mask = Image.fromarray(ctx.hard_edge_mask_arr)
+            
+            p2 = processing.StableDiffusionProcessingImg2Img(
+                sd_model=shared.sd_model, outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples, outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
+                prompt=ctx.prompt, negative_prompt=ctx.negative_prompt, seed=ctx.seed, subseed=-1, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, seed_enable_extras=False,
+                sampler_name=ctx.sampler_name, scheduler=ctx.scheduler, batch_size=1, n_iter=1, steps=max(1, int(ctx.steps * 0.2 * power)),
+                cfg_scale=ctx.cfg_scale, distilled_cfg_scale=ctx.shift, width=ctx.gen_width, height=ctx.gen_height, restore_faces=False, tiling=False,
+                init_images=[ctx.result_img], mask=hard_edge_mask, mask_blur=4, inpainting_fill=ctx.inpainting_fill_idx, resize_mode=0,
+                denoising_strength=(- (ctx.denoising_strength ** 2) / (2 * power) + ctx.denoising_strength), image_cfg_scale=None, inpaint_full_res=False, inpaint_full_res_padding=0, inpainting_mask_invert=0
+            )
+            p2.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
+            
+            processed2 = processing.process_images(p2)
+            if processed2.images:
+                inpaint_image_2 = processed2.images[0]
+                base_arr = np.array(ctx.result_img).astype(np.float32)
+                new_arr = np.array(inpaint_image_2).astype(np.float32)
+                alpha = (ctx.blured_edge_mask_arr / 255.0)[:, :, np.newaxis]
+                final_blended_arr = base_arr * (1.0 - alpha) + new_arr * alpha
+                ctx.result_img = Image.fromarray(final_blended_arr.astype(np.uint8))
+        
+        actual_mask_resized = cv2.resize(actual_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_NEAREST)
+        hard_edge_mask_resized = cv2.resize(ctx.hard_edge_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_LINEAR)
+        paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_resized, hard_edge_mask_resized))
+        paste_mask_arr[paste_mask_arr > 0] = 255
+        ctx.paste_mask = Image.fromarray(paste_mask_arr)
+        
+        return ctx
+
+
+class FinalizeStateStep(GenerationStep):
+    id = "finalize_state"
+    name = "Core: Finalize"
+    sort_index = 1000
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        if not ctx.result_img:
+            return ctx
+            
+        edge_fix_mask_img = Image.fromarray(ctx.blured_edge_mask_arr) if ctx.blured_edge_mask_arr is not None else None
+        canvas_state.set_pending_result(ctx.result_img, ctx.canvas_source_rect, ctx.paste_mask, ctx.downscale_algo, edge_fix_mask=edge_fix_mask_img)
+        
+        def to_b64(img):
+            buffered = BytesIO()
+            img.save(buffered, format="PNG", compress_level=1)
+            return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+        patch_b64 = to_b64(canvas_state.pending_data['patch'])
+        mask_b64 = to_b64(canvas_state.pending_data['mask_rgba'])
+        edge_mask_b64 = to_b64(canvas_state.pending_data['edge_mask_rgba']) if 'edge_mask_rgba' in canvas_state.pending_data else None
+        
+        payload = {
+            "type": "preview",
+            "image": canvas_state.get_base64(),
+            "patch": patch_b64,
+            "mask": mask_b64,
+            "transform": {
+                "scale": ctx.prep_info['transform']['scale'],
+                "pad_left": ctx.prep_info['transform']['pad_left'],
+                "pad_top": ctx.prep_info['transform']['pad_top'],
+                "rect_x": ctx.canvas_source_rect['x'],
+                "rect_y": ctx.canvas_source_rect['y']
+            }
+        }
+        if edge_mask_b64:
+            payload["edge_mask"] = edge_mask_b64
+            
+        ctx.final_payload = json.dumps(payload)
+        return ctx
+
+
+def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo):
+    ctx = GenerationCtx(
+        id_task=id_task, payload_json=payload_json, prompt=prompt, negative_prompt=negative_prompt,
+        steps=steps, cfg_scale=cfg_scale, shift=shift, denoising_strength=denoising_strength,
+        sampler_name=sampler_name, scheduler=scheduler, gen_width=gen_width, gen_height=gen_height,
+        seed=seed, inpainting_fill_idx=inpainting_fill_idx, outpaint_pad=outpaint_pad,
+        upscaler_name=upscaler_name, auto_scale=auto_scale, downscale_algo=downscale_algo
+    )
+    
+    pipeline = [
+        ParseInputStep(),
+        PrepareCanvasStep(),
+        LLMPromptOptimizeStep(),
+        AppendCloseUpStep(),
+        SetupProcessingStep(),
+        LatentBlendStep(),
+        FirstPassStep(),
+        EdgeFixStep(),
+        FinalizeStateStep()
+    ]
+    
+    try:
+        for step in pipeline:
+            if step.id not in ctx.step_params:
+                ctx.step_params[step.id] = {}
+            ctx.var = ctx.step_params[step.id]
+            
+            ctx = step(ctx)
+            if ctx.is_error or ctx.final_payload != "":
+                break
+    except Exception as e:
+        traceback.print_exc()
+        ctx.is_error = True
+        ctx.error_message = str(e)
+        
+    if ctx.is_error and ctx.error_message != "":
+        return "", gr.update(), gr.update(), f"Error: {ctx.error_message}"
+        
+    if ctx.final_payload:
+        return ctx.final_payload, gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo()), ""
+        
     return "", gr.update(), gr.update(), ""
 
 
@@ -405,7 +754,7 @@ def handle_upload(image):
     return json.dumps({"image": canvas_state.get_base64()}), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
 
 
-def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale, p_edge_fix, p_edge_fix_power, p_latent_blend, p_latent_blend_power):
+def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale):
     import json, zipfile, os, base64, re
     from io import BytesIO
     from PIL import Image
@@ -414,6 +763,7 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
     mask_b64 = data.get("mask", "")
 
     meta = {
+        "version": 2,
         "viewport": viewport,
         "prompt": p_prompt,
         "negative_prompt": p_neg,
@@ -431,10 +781,8 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
         "upscaler_name_input": p_up,
         "downscale_algo_input": p_down,
         "auto_scale": p_auto_scale,
-        "edge_fix": p_edge_fix,
-        "edge_fix_power": p_edge_fix_power,
-        "latent_blend": p_latent_blend,
-        "latent_blend_power": p_latent_blend_power
+        "workflow": canvas_state.workflow,
+        "step_params": canvas_state.step_params if canvas_state.step_params else {}
     }
 
     zip_buffer = BytesIO()
@@ -510,10 +858,23 @@ def api_load_project(*args):
         with zipfile.ZipFile(filepath, 'r') as zip_ref:
             if "meta.json" in zip_ref.namelist():
                 meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
+                
+            # Version Fallback parsing
+            if meta.get("version", 1) == 1:
+                # Migrate old v1 meta to v2 format internally
+                meta["version"] = 2
+                meta["workflow"] = []
+                meta["step_params"] = {
+                    "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
+                    "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
+                }
+            
+            canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
 
             def load_img(base_name, is_mask=False):
-                mode = "RGBA" if is_mask else "RGB"
-                # 1. Try loading from tiles if available
+                mode = "RGBA" if not is_mask else "RGBA" # Both mask and canvas should preserve their true channels, RGBA or L, but we use RGBA
+                # Actually, canvas needs RGBA to preserve transparency! Mask can be RGBA too.
+                mode = "RGBA"
                 if meta.get("image_sizes") and base_name in meta["image_sizes"] and meta["image_sizes"][base_name]:
                     size = meta["image_sizes"][base_name]
                     tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
@@ -574,16 +935,12 @@ def api_load_project(*args):
             meta.get("upscaler_name_input", gr.skip()),
             meta.get("downscale_algo_input", gr.skip()),
             meta.get("auto_scale", gr.skip()),
-            meta.get("edge_fix", gr.skip()),
-            meta.get("edge_fix_power", gr.skip()),
-            meta.get("latent_blend", gr.skip()),
-            meta.get("latent_blend_power", gr.skip()),
             gr.update(value=None),
             gr.update(value=loaded_name)
         ]
     except Exception as e:
         print(f"Error loading project: {e}")
-        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*22 + [gr.update(value=None), gr.skip()]
+        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*18 + [gr.update(value=None), gr.skip()]
 
 
 def api_sam_predict(payload_json):
@@ -665,3 +1022,54 @@ def api_sam_predict(payload_json):
     return ""
 
 
+
+def api_get_workflow():
+    import json
+    
+    pipeline_template = [
+        PrepareCanvasStep,
+        LLMPromptOptimizeStep,
+        AppendCloseUpStep,
+        SetupProcessingStep,
+        LatentBlendStep,
+        FirstPassStep,
+        EdgeFixStep,
+        FinalizeStateStep
+    ]
+    
+    registry = []
+    for cls in pipeline_template:
+        registry.append({
+            "id": cls.id,
+            "name": getattr(cls, 'name', cls.__name__),
+            "is_plugin": getattr(cls, 'is_plugin', False),
+            "sort_index": getattr(cls, 'sort_index', 500),
+            "params": cls.get_params()
+        })
+        
+    return json.dumps({
+        "type": "workflow_query",
+        "workflow": canvas_state.workflow,
+        "step_params": canvas_state.step_params,
+        "registry": registry
+    })
+
+def api_update_workflow(payload_json):
+    import json
+    if payload_json:
+        try:
+            data = json.loads(payload_json)
+            payload_step_params = data.get("step_params", {})
+            plugins = [cls for cls in GenerationStep.__subclasses__() if getattr(cls, 'is_plugin', False)]
+            
+            for plugin_cls in plugins:
+                if plugin_cls.id in payload_step_params:
+                    resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
+                    if plugin_cls.id not in canvas_state.step_params:
+                        canvas_state.step_params[plugin_cls.id] = {}
+                    canvas_state.step_params[plugin_cls.id].update(resolved)
+                    
+        except Exception as e:
+            print(f"[Infinite Canvas] Error updating workflow: {e}")
+            
+    return api_get_workflow()

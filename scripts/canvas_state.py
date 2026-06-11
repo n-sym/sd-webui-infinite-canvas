@@ -53,6 +53,8 @@ class CanvasState:
         self.pending_data = None
         self.max_size = 4096  # Configurable max canvas size limit
         self.is_dirty = False
+        self.workflow = []
+        self.step_params = {}
 
     def clear(self):
         self.image = Image.new("RGBA", (1024, 1024), (255, 255, 255, 0))
@@ -60,6 +62,12 @@ class CanvasState:
         self.image_now = None
         self.pending_data = None
         self.is_dirty = False
+        self.workflow = []
+        self.step_params = {}
+        
+    def update_workflow(self, workflow: list, step_params: dict):
+        self.workflow = workflow
+        self.step_params = step_params
         
     def update_from_base64(self, base64_str):
         """Updates canvas from an uploaded base64 string."""

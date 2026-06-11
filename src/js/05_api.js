@@ -20,10 +20,30 @@
                 maskBase64 = maskC.toDataURL('image/png');
             }
 
+            const stepParams = {};
+            document.querySelectorAll('.ic-node-param').forEach(input => {
+                const nodeId = input.getAttribute('data-node-id');
+                const paramName = input.getAttribute('data-param-name');
+                if (!nodeId || !paramName) return;
+                
+                let val;
+                if (input.type === 'checkbox') {
+                    val = input.checked;
+                } else if (input.type === 'range' || input.type === 'number') {
+                    val = parseFloat(input.value);
+                } else {
+                    val = input.value;
+                }
+                
+                if (!stepParams[nodeId]) stepParams[nodeId] = {};
+                stepParams[nodeId][paramName] = val;
+            });
+
             const payload = {
                 target_rect: targetRect,
                 source_rect: sourceRect,
-                mask_base64: maskBase64
+                mask_base64: maskBase64,
+                step_params: stepParams
             };
             
             const payloadInput = document.querySelector('#ic_payload textarea');

@@ -203,25 +203,9 @@ def on_ui_tabs():
                     from modules import shared
                     upscaler_name_input = gr.Dropdown(label="Upscaler (for resizing source)", choices=[x.name for x in shared.sd_upscalers], value="None")
                     downscale_algo_input = gr.Dropdown(label="Downscale Algorithm", choices=["Bicubic", "Lanczos", "Bilinear", "Nearest"], value="Bicubic")
-                    with gr.Row():
-                        ic_edge_fix = gr.Checkbox(label="Edge Fix", value=True, elem_id="ic_edge_fix")
-                        ic_edge_fix_power = gr.Slider(label="Edge Fix Power (t)", minimum=0.5, maximum=2.5, step=0.1, value=1.0, elem_id="ic_edge_fix_power")
-                        
-                    ic_edge_fix.change(
-                        fn=lambda x: gr.update(visible=x),
-                        inputs=[ic_edge_fix],
-                        outputs=[ic_edge_fix_power]
-                    )
-                    
-                    with gr.Row():
-                        ic_latent_blend = gr.Checkbox(label="Latent Edge Blend (Unsafe)", value=False, elem_id="ic_latent_blend")
-                        ic_latent_blend_power = gr.Slider(label="Dynamic Blend Power (0=Static)", minimum=0.0, maximum=2.0, step=0.1, value=1.0, elem_id="ic_latent_blend_power", visible=False)
-                        
-                    ic_latent_blend.change(
-                        fn=lambda x: gr.update(visible=x),
-                        inputs=[ic_latent_blend],
-                        outputs=[ic_latent_blend_power]
-                    )
+
+                with gr.Accordion("Pipeline Nodes", open=True, elem_id="ic_accordion_workflow"):
+                    workflow_html = gr.HTML(elem_id="ic_workflow_html", value="<div style='padding:10px; color:#888;'>Loading pipeline...</div>")
 
                 with gr.Accordion("Developer", open=False, elem_id="ic_accordion_dev"):
                     with gr.Row():
@@ -245,6 +229,9 @@ def on_ui_tabs():
                     
                     sam_payload_input = gr.Textbox(elem_id="ic_sam_payload_input")
                     sam_predict_btn = gr.Button("SAM Predict", elem_id="ic_sam_predict_btn")
+                    query_workflow_btn = gr.Button("Query Workflow", elem_id="ic_query_workflow_btn")
+                    update_workflow_payload = gr.Textbox(elem_id="ic_update_workflow_payload")
+                    update_workflow_btn = gr.Button("Update Workflow", elem_id="ic_update_workflow_btn")
                 
                 html_info = gr.HTML(elem_id="ic_html_info")
                 
@@ -263,8 +250,12 @@ def on_ui_tabs():
                 trigger_btn.click(
                     fn=wrap_gradio_gpu_call(make_dynamic('api_generate'), extra_outputs=[gr.update(), gr.update(), ""]),
                     _js="function(){ var args = Array.from(arguments); args[0] = window.ic_current_task_id || 'ic_task'; return args; }",
-                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
+                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input],
                     outputs=[payload_output, prev_btn, now_btn, html_info],
+                ).success(
+                    fn=make_dynamic('api_get_workflow'),
+                    inputs=[],
+                    outputs=[payload_output]
                 )
                 
                     
@@ -311,6 +302,10 @@ def on_ui_tabs():
                     fn=make_dynamic('api_restore_session'),
                     inputs=[],
                     outputs=[payload_output]
+                ).success(
+                    fn=make_dynamic('api_get_workflow'),
+                    inputs=[],
+                    outputs=[payload_output]
                 )
                 
                 clear_session_btn.click(
@@ -355,14 +350,18 @@ def on_ui_tabs():
                 
                 ic_save_project_hidden_btn.click(
                     fn=make_dynamic('api_save_project'),
-                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power],
+                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name, ic_auto_scale],
                     outputs=[ic_download_file]
                 )
                 
                 ic_upload_file.change(
                     fn=make_dynamic('api_load_project'),
                     inputs=[ic_upload_file],
-                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, ic_edge_fix, ic_edge_fix_power, ic_latent_blend, ic_latent_blend_power, ic_upload_file, ic_project_name]
+                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, ic_upload_file, ic_project_name]
+                ).success(
+                    fn=make_dynamic('api_get_workflow'),
+                    inputs=[],
+                    outputs=[payload_output]
                 )
                 
                     
@@ -370,6 +369,18 @@ def on_ui_tabs():
                     fn=make_dynamic('api_sam_predict'),
                     inputs=[sam_payload_input],
                     outputs=[payload_output],
+                )
+                
+                query_workflow_btn.click(
+                    fn=make_dynamic('api_get_workflow'),
+                    inputs=[],
+                    outputs=[payload_output]
+                )
+                
+                update_workflow_btn.click(
+                    fn=make_dynamic('api_update_workflow'),
+                    inputs=[update_workflow_payload],
+                    outputs=[payload_output]
                 )
 
                 import modules.infotext_utils as parameters_copypaste
