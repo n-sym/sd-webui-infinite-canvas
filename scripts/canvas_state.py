@@ -182,6 +182,25 @@ class CanvasState:
         self._update_bounds(rect['x'], rect['y'], rect['w'], rect['h'])
         return 0, 0
 
+    def _ensure_bounds_cover_tiles(self):
+        """Ensures that canvas_bounds is large enough to cover all existing tiles."""
+        if not self.tiles:
+            return
+        min_x = float('inf')
+        min_y = float('inf')
+        max_x = float('-inf')
+        max_y = float('-inf')
+        for tx, ty in self.tiles.keys():
+            x = tx * self.TILE_SIZE
+            y = ty * self.TILE_SIZE
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+            max_x = max(max_x, x + self.TILE_SIZE)
+            max_y = max(max_y, y + self.TILE_SIZE)
+            
+        if min_x != float('inf'):
+            self._update_bounds(min_x, min_y, max_x - min_x, max_y - min_y)
+
     def _extract_from_tiles_for_rect(self, rect):
         import math
         x1, y1 = int(rect['x']), int(rect['y'])
@@ -259,10 +278,7 @@ class CanvasState:
             
         # 1. Scale Canvas if Zoom-in (Target drawn small)
         target_max = max(target_rect['w'], target_rect['h'])
-        if target_max <= 0:
-            return None
-            
-        requested_scale = generation_res / target_max
+        requested_scale = generation_res / target_max if target_max > 0 else 1.0
         
         actual_canvas_scale = 1.0
         if requested_scale > 1.0 and auto_scale:

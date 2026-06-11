@@ -458,12 +458,55 @@ class LatentBlendStep(GenerationStep):
         return ctx
 
 
+def ic_process_images(p, ctx):
+    compile_preset = getattr(ctx, "compile_preset", "Disable")
+    if compile_preset != "Disable":
+        try:
+            actual_preset = compile_preset
+            TorchCompileForForge = None
+            from modules import scripts
+            for script_data in scripts.scripts_data:
+                if script_data.script_class.__name__ == "TorchCompileForForge":
+                    TorchCompileForForge = script_data.script_class
+                    break
+            
+            if TorchCompileForForge is None:
+                raise ImportError("TorchCompileForForge not found in global scripts.")
+            
+            class HackCompileScript(scripts.Script):
+                def title(self): return "Hack Compile"
+                def show(self, is_img2img): return scripts.AlwaysVisible
+                def process_batch(self, p_inner, *args, **kwargs):
+                    print(f"[Infinite Canvas] Torch Compile Adapter: Applying '{actual_preset}'...")
+                    self.compiler = TorchCompileForForge()
+                    self.compiler.process_batch(p_inner, preset=actual_preset)
+                    
+                def postprocess(self, p_inner, processed, *args):
+                    if hasattr(self, "compiler"):
+                        self.compiler.process_batch(p_inner, preset="Disable")
+                        print("[Infinite Canvas] Torch Compile Adapter: Restored UNet.")
+                        
+            hack_script = HackCompileScript()
+            hack_script.args_from = len(p.script_args) if p.script_args else 0
+            hack_script.args_to = hack_script.args_from
+            if getattr(p, "scripts", None) is not None and getattr(p.scripts, "alwayson_scripts", None) is not None:
+                p.scripts.alwayson_scripts.append(hack_script)
+            elif getattr(p, "scripts", None) is None:
+                from modules.scripts import ScriptRunner
+                p.scripts = ScriptRunner()
+                p.scripts.alwayson_scripts = [hack_script]
+        except Exception as e:
+            print(f"[Infinite Canvas] Torch Compile Adapter failed to load: {e}")
+
+    return processing.process_images(p)
+
 class FirstPassStep(GenerationStep):
     id = "first_pass"
     name = "Core: Generation"
     sort_index = 100
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        processed = processing.process_images(ctx.p)
+        processed = ic_process_images(ctx.p, ctx)
+            
         if processed.images:
             ctx.result_img = processed.images[0]
         else:
@@ -575,7 +618,7 @@ class EdgeFixStep(GenerationStep):
             )
             p2.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
             
-            processed2 = processing.process_images(p2)
+            processed2 = ic_process_images(p2, ctx)
             if processed2.images:
                 inpaint_image_2 = processed2.images[0]
                 base_arr = np.array(ctx.result_img).astype(np.float32)
@@ -631,7 +674,7 @@ class FinalizeStateStep(GenerationStep):
         return ctx
 
 
-def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo):
+def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo, compile_preset="Disable"):
     ctx = GenerationCtx(
         id_task=id_task, payload_json=payload_json, prompt=prompt, negative_prompt=negative_prompt,
         steps=steps, cfg_scale=cfg_scale, shift=shift, denoising_strength=denoising_strength,
@@ -639,6 +682,7 @@ def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scal
         seed=seed, inpainting_fill_idx=inpainting_fill_idx, outpaint_pad=outpaint_pad,
         upscaler_name=upscaler_name, auto_scale=auto_scale, downscale_algo=downscale_algo
     )
+    ctx.compile_preset = compile_preset
     
     pipeline = [
         ParseInputStep(),
@@ -765,7 +809,7 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
     mask_b64 = data.get("mask", "")
 
     meta = {
-        "version": 2,
+        "version": 3,
         "viewport": viewport,
         "prompt": p_prompt,
         "negative_prompt": p_neg,
@@ -857,14 +901,16 @@ def api_load_project(*args):
                 meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
                 
             # Version Fallback parsing
-            if meta.get("version", 1) == 1:
-                # Migrate old v1 meta to v2 format internally
-                meta["version"] = 2
-                meta["workflow"] = []
-                meta["step_params"] = {
-                    "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
-                    "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
-                }
+            if meta.get("version", 1) < 3:
+                # Migrate old meta to v3 format internally
+                meta["version"] = 3
+                if "workflow" not in meta:
+                    meta["workflow"] = []
+                if "step_params" not in meta:
+                    meta["step_params"] = {
+                        "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
+                        "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
+                    }
             
             canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
 
@@ -912,7 +958,13 @@ def api_load_project(*args):
             canvas_state.tiles = load_tiles("canvas") or {}
             canvas_state.tiles_prev = load_tiles("canvas_prev")
             canvas_state.tiles_now = load_tiles("canvas_now")
-            canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
+            if meta.get("version", 1) < 3:
+                # Reconstruct bounds safely from tiles for older projects lacking accurate bounding boxes
+                canvas_state._ensure_bounds_cover_tiles()
+            else:
+                canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
+            
+            canvas_state.current_state = 'now'
 
             # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
             m_img = None

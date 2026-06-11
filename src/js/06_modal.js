@@ -77,12 +77,18 @@
         const modalBtnDiscard = document.getElementById('ic-modal-discard');
         const modalBtnApply = document.getElementById('ic-modal-apply');
         
-        function drawBlueBox(ctx, x, y, w, h, scale) {
+        function drawBlueBox(ctx, x, y, w, h, scale, angle=0) {
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
             ctx.lineWidth = 2 / scale;
             ctx.setLineDash([5 / scale, 5 / scale]);
-            ctx.strokeRect(x, y, w, h);
+            if (angle) {
+                ctx.translate(x + w/2, y + h/2);
+                ctx.rotate(angle);
+                ctx.strokeRect(-w/2, -h/2, w, h);
+            } else {
+                ctx.strokeRect(x, y, w, h);
+            }
             ctx.restore();
         }
                 function drawModal() {
@@ -148,13 +154,13 @@
                         
                         if (pendingUpdate && pendingUpdate.transform) {
                             const t = pendingUpdate.transform;
-                            bx = bx * t.scale + t.pad_left;
-                            by = by * t.scale + t.pad_top;
-                            bw *= t.scale;
-                            bh *= t.scale;
+                            bx = t.rect_x;
+                            by = t.rect_y;
+                            bw = pendingPatchImage.width;
+                            bh = pendingPatchImage.height;
                         }
                         
-                        drawBlueBox(mctx, bx, by, bw, bh, currentScale);
+                        drawBlueBox(mctx, bx, by, bw, bh, currentScale, sourceRect.angle || 0);
                         
                         mctx.restore();
                     }
@@ -292,10 +298,10 @@
             // We must update the transform locally BEFORE clicking apply, because apply will just return the final image!
             if (pendingUpdate && pendingUpdate.transform) {
                 const t = pendingUpdate.transform;
-                sourceRect.x = sourceRect.x * t.scale + t.pad_left;
-                sourceRect.y = sourceRect.y * t.scale + t.pad_top;
-                sourceRect.w *= t.scale;
-                sourceRect.h *= t.scale;
+                sourceRect.x = t.rect_x;
+                sourceRect.y = t.rect_y;
+                sourceRect.w = pendingPatchImage.width;
+                sourceRect.h = pendingPatchImage.height;
                 
                 const cx = canvas.width / 2;
                 const cy = canvas.height / 2;

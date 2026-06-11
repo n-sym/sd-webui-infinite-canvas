@@ -189,7 +189,14 @@ def on_ui_tabs():
                     with gr.Row():
                         sampler_name = gr.Dropdown(choices=[x.name for x in sd_samplers.all_samplers], value=default_sampler, label="Sampling Method", elem_id="ic_sampler")
                         scheduler = gr.Dropdown(choices=["Automatic"] + [x.label for x in sd_schedulers.schedulers], value=default_scheduler, label="Schedule Type", elem_id="ic_scheduler")
-                    seed = gr.Number(label="Seed", value=-1, elem_id="ic_seed")
+                    with gr.Row():
+                        seed = gr.Number(label="Seed", value=-1, elem_id="ic_seed")
+                        ic_compile_preset = gr.Dropdown(
+                            label="Torch Compile Integrated (Adapter)",
+                            value="Disable",
+                            choices=["Disable", "guard_filter_fn", "dynamic", "max-autotune", "max-autotune-no-cudagraphs", "reduce-overhead"],
+                            elem_id="ic_compile_preset"
+                        )
 
                 with gr.Accordion("Canvas & Mask Parameters", open=False, elem_id="ic_accordion_canvas"):
                     with gr.Row():
@@ -250,7 +257,7 @@ def on_ui_tabs():
                 trigger_btn.click(
                     fn=wrap_gradio_gpu_call(make_dynamic('api_generate'), extra_outputs=[gr.update(), gr.update(), ""]),
                     _js="function(){ var args = Array.from(arguments); args[0] = window.ic_current_task_id || 'ic_task'; return args; }",
-                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input],
+                    inputs=[dummy_component, payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, ic_auto_scale, downscale_algo_input, ic_compile_preset],
                     outputs=[payload_output, prev_btn, now_btn, html_info],
                 ).success(
                     fn=make_dynamic('api_get_workflow'),
