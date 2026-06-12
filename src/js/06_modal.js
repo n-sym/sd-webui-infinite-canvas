@@ -368,22 +368,27 @@
             if (applyBtn) applyBtn.click();
         });
         
-        // Modal render loop
+        // Modal render loop — only schedules frames while modal is visible
         const modalLoop = () => {
-            if(modalVisible) drawModal();
-            requestAnimationFrame(modalLoop);
+            if(modalVisible) {
+                drawModal();
+                requestAnimationFrame(modalLoop);
+            }
         };
-        modalLoop();
 
-        setInterval(() => {
-            // Re-query in case Gradio replaced the DOM element
+        const outputEl = document.getElementById('ic_output');
+        const handleOutput = () => {
             const currentOutArea = document.querySelector('#ic_output textarea');
             const text = currentOutArea ? currentOutArea.value : '';
+            
+            if (text === '') {
+                lastText = '';
+            }
             if (text && text !== lastText && text.startsWith('{')) {
                 lastText = text;
                 try {
                     const data = JSON.parse(text);
-                    
+
                     if (window.icStartAutosavePoller) window.icStartAutosavePoller();
                     
                     const populateTiles = (tilesArray) => {
@@ -467,12 +472,13 @@
                         }
                         
                         modalVisible = true;
+                        requestAnimationFrame(modalLoop);
                         modalOverlay.style.display = 'flex';
                     } else if (data.type === 'dynamic_dialog') {
                         window.exist_pending_generation = true;
                         if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
                         
-                        if (dynamicModalTitle) dynamicModalTitle.innerText = data.title || "Dialog";
+                        if (dynamicModalTitle) dynamicModalTitle.innerText = data.title || t("Dialog");
                         if (dynamicModalContent) dynamicModalContent.innerHTML = data.html || "";
                         if (dynamicModal) dynamicModal.style.display = 'flex';
                         
@@ -486,6 +492,10 @@
                         }
 
                         
+                    } else if (data.type === 'error') {
+                        if (window.unlockProjectUI) window.unlockProjectUI();
+                        console.error("[Infinite Canvas]", data.message);
+                        if (window.icShowCustomToast) window.icShowCustomToast(data.message, 3000, 'red', 'ic-error-toast');
                     } else if (data.type === 'project_load') {
                         // Suppress enforceSourceRatio() during the entire load.
                         window._ic_project_load_suppress = true;
@@ -494,6 +504,7 @@
                             window._ic_project_load_suppress = false;
                             window._ic_project_load_timer = null;
                             draw();
+                            if (window.unlockProjectUI) window.unlockProjectUI();
                         }, 600);
 
                         // Restore viewport FIRST
@@ -543,7 +554,7 @@
                         }
                     } else if (data.type === 'error') {
                         console.error("Backend Error:", data.message);
-                        alert("Error: " + data.message);
+                        alert(t("Error: ") + data.message);
                         document.body.style.cursor = 'default';
                         canvas.style.cursor = 'crosshair';
                     }
@@ -551,5 +562,9 @@
                     console.error("Failed to parse result payload", e);
                 }
             }
-        }, 100);
+        };
+        if (outputEl) {
+            const outputObserver = new MutationObserver(handleOutput);
+            outputObserver.observe(outputEl, { childList: true, subtree: true, attributes: true, characterData: true });
+        }
     }

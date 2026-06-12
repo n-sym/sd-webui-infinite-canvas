@@ -98,9 +98,9 @@ function t(enStr) {
         '🔄 Undo/Redo & Generation': '🔄 撤销重做与生成',
         'After generation, a preview modal will pop up. You can adjust feathering before applying.': '生成完成后，会弹出预览确认框，你可以在应用前调整边缘羽化。',
         'You can use the Canvas Undo/Redo buttons in the toolbar to revert your actions anytime.': '你可以随时使用工具栏的【画布撤销/重做】按钮来回退你的操作。',
-        '💾 Project Management': '💾 项目加载和保存',
-        'You can load and save projects, retaining most of the temporary data during your workflow.': '可以加载和保存项目，保留大多工作时的临时数据。',
-        'There is a tutorial.infcanvas file in the extension root directory as an example project.': '在插件的根目录有tutorial.infcanvas文件，作为一个示例项目。',
+        '💾 Project Management': '💾 工程加载和保存',
+        'You can load and save projects, retaining most of the temporary data during your workflow.': '可以加载和保存工程，保留大多工作时的临时数据。',
+        'There is a tutorial.infcanvas file in the extension root directory as an example project.': '在插件的根目录有tutorial.infcanvas文件，作为一个示例工程。',
         '🔌 Plugins': '🔌 插件',
         'There are currently several Built-In plugins available.': '目前有一些Built-In插件可以使用。',
         'More plugin-related features may be implemented in the future.': '更多插件相关功能，有可能在后续进行实现。',
@@ -116,14 +116,35 @@ function t(enStr) {
         'Tile Batch Size': '并行处理切片数 (Batch Size)',
         'Steps': '独立步数',
         'Denoising Strength': '重绘幅度',
-        'Manual Prompt Review': '手动提示词审查'
+        'Manual Prompt Review': '手动提示词审查',
+        'Autosaving...': '自动保存中...',
+        'Autosaved successfully!': '自动保存成功！',
+        'Autosave Detected': '检测到自动保存',
+        'A newer autosave exists for this project. Do you want to recover it?': '该工程存在更新的自动保存数据。是否恢复？',
+        'No, load original': '否，加载原始数据',
+        'Yes, recover': '是，恢复',
+        'Save': '保存',
+        'Loading projects...': '加载工程列表...',
+        'Loading project...': '加载工程中...',
+        'Auto Save': '自动保存',
+        'Projects': '工程',
+        'Processing...': '处理中...',
+        'Dialog': '对话框',
+        'Pipeline': '执行节点',
+        'No projects found.': '未找到工程。',
+        'Saving project...': '保存工程中...',
+        'Project loaded successfully!': '工程加载成功！',
+        'Project saved successfully!': '工程保存成功！',
+        'Error: ': '错误：',
+        'Existing Projects': '已有工程'
     };
     return dict[enStr] || enStr;
 }
 
+window.t = t;
+window.__ic_i18n = t;
+
 document.addEventListener("DOMContentLoaded", function() {
-    setInterval(translateGradio, 1000);
-    
     function translateGradio() {
         if (!isZh) return;
         const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_accordion_workflow', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
@@ -138,6 +159,28 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
             }
         });
+    }
+
+    // Run translation once immediately, then observe for future DOM changes
+    const icContainer = document.getElementById('ic-container');
+    if (icContainer) {
+        translateGradio();
+        const gradioObserver = new MutationObserver(() => {
+            translateGradio();
+        });
+        gradioObserver.observe(icContainer, { childList: true, subtree: true });
+    } else {
+        // Fallback: container not ready yet, retry after init
+        setTimeout(() => {
+            translateGradio();
+            const container = document.getElementById('ic-container');
+            if (container) {
+                const gradioObserver = new MutationObserver(() => {
+                    translateGradio();
+                });
+                gradioObserver.observe(container, { childList: true, subtree: true });
+            }
+        }, 2000);
     }
 
     let initInterval = setInterval(() => {

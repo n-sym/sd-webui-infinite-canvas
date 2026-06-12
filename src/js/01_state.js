@@ -121,7 +121,7 @@ const IC_ICONS = {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-weight: 700;">${t('Existing Projects')}</div>
                 <button id="ic-projects-import-btn" class="fluent-card" style="padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--body-text-color, #fff);">
-                    <span style="font-size: 16px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.import}</span> ${t('Import ZIP')}
+                    <span style="font-size: 16px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.import}</span> ${t('Import Project')}
                 </button>
             </div>
             
@@ -258,7 +258,7 @@ const IC_ICONS = {
             <div id="ic-nodes-panel" class="fluent-panel" style="pointer-events:auto; cursor:default; display:flex; flex-direction:row; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.4); border-left:none; border-top-right-radius:24px; border-bottom-right-radius:24px; box-shadow: 0 4px 12px rgba(0,0,0,0), inset 1px 1px 0 rgba(255,255,255,0.2); width:750px; height:100%; overflow:hidden; z-index:1; position:relative; transition:box-shadow 0.3s ease;">
                 <!-- Nodes List Column -->
                 <div style="width:260px; padding:20px; display:flex; flex-direction:column;">
-                    <div style="font-weight:bold; color:var(--body-text-color, white); margin-top:12px; margin-bottom:25px; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.8; padding-left:2px;">Pipeline</div>
+                    <div style="font-weight:bold; color:var(--body-text-color, white); margin-top:12px; margin-bottom:25px; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.8; padding-left:2px;">${t('Pipeline')}</div>
                     <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
                 </div>
                 <!-- Settings Column -->
@@ -346,7 +346,7 @@ const IC_ICONS = {
     const dynamicModalHTML = `
     <div id="ic_dynamic_modal" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; flex-direction:column; font-family:sans-serif; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
         <div class="fluent-panel" style="max-width:600px; width:100%; padding:24px; border-radius:24px; position:relative; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); border:1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.2);">
-            <h3 id="ic_dynamic_modal_title" style="margin-top:0; margin-bottom:20px; color:var(--body-text-color, #fff); font-size: 20px;">Dialog</h3>
+            <h3 id="ic_dynamic_modal_title" style="margin-top:0; margin-bottom:20px; color:var(--body-text-color, #fff); font-size: 20px;">${t('Dialog')}</h3>
             <div id="ic_dynamic_modal_content"></div>
         </div>
     </div>`;

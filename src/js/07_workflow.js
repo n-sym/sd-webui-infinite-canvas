@@ -80,16 +80,17 @@ setTimeout(() => {
     }
 }, 1500);
 
-// Poll the hidden output textarea to catch the response
-setInterval(() => {
+// Watch the hidden output textarea for workflow responses via MutationObserver
+const workflowOutputEl = document.getElementById("ic_output");
+const handleWorkflowOutput = () => {
     const outputElem = document.querySelector("#ic_output textarea");
     const htmlContainer = document.getElementById("ic_workflow_html");
-    
+
     if (!outputElem || !htmlContainer) return;
-    
+
     const val = outputElem.value;
     if (!val || val === lastQueryPayload) return;
-    
+
     try {
         const data = JSON.parse(val);
         if (data.type === "workflow_query") {
@@ -99,7 +100,11 @@ setInterval(() => {
     } catch (e) {
         // ignore parsing errors
     }
-}, 500);
+};
+if (workflowOutputEl) {
+    const workflowObserver = new MutationObserver(handleWorkflowOutput);
+    workflowObserver.observe(workflowOutputEl, { childList: true, subtree: true, attributes: true, characterData: true });
+}
 
 function updateWorkflowUI(data, container) {
     if (!data || !data.registry) return;

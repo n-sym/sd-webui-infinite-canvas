@@ -221,12 +221,36 @@
         if (found) {
             const scaleX = sourceRect.w / maskDataCanvas.width;
             const scaleY = sourceRect.h / maskDataCanvas.height;
-            targetRect = {
-                x: sourceRect.x + minX * scaleX,
-                y: sourceRect.y + minY * scaleY,
-                w: (maxX - minX + 1) * scaleX,
-                h: (maxY - minY + 1) * scaleY
-            };
+
+            if (sourceRect.angle) {
+                // Convert mask-local bounding box corners to source-rect-local coords,
+                // then rotate around the source rect center, then offset to world position
+                const corners = [
+                    { x: minX * scaleX, y: minY * scaleY },
+                    { x: (maxX + 1) * scaleX, y: minY * scaleY },
+                    { x: (maxX + 1) * scaleX, y: (maxY + 1) * scaleY },
+                    { x: minX * scaleX, y: (maxY + 1) * scaleY }
+                ];
+                const cx = sourceRect.w / 2;
+                const cy = sourceRect.h / 2;
+                const rotated = corners.map(p => rotatePoint(p.x, p.y, cx, cy, sourceRect.angle));
+                const worldCorners = rotated.map(p => ({ x: p.x + sourceRect.x, y: p.y + sourceRect.y }));
+                const xs = worldCorners.map(p => p.x);
+                const ys = worldCorners.map(p => p.y);
+                targetRect = {
+                    x: Math.min(...xs),
+                    y: Math.min(...ys),
+                    w: Math.max(...xs) - Math.min(...xs),
+                    h: Math.max(...ys) - Math.min(...ys)
+                };
+            } else {
+                targetRect = {
+                    x: sourceRect.x + minX * scaleX,
+                    y: sourceRect.y + minY * scaleY,
+                    w: (maxX - minX + 1) * scaleX,
+                    h: (maxY - minY + 1) * scaleY
+                };
+            }
         } else {
             // Default if nothing drawn
             targetRect = {

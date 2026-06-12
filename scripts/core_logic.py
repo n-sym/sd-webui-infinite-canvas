@@ -402,7 +402,8 @@ def api_list_projects_json():
     return json.dumps(projects)
 
 def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale):
-    import json, zipfile, os, base64, re
+    import json
+    import os, zipfile, base64, re
     from io import BytesIO
     from PIL import Image
     data = json.loads(payload_json) if payload_json else {}
@@ -440,21 +441,29 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
         futures = []
         executor = concurrent.futures.ThreadPoolExecutor()
 
-        def add_tiles_dict(tiles_dict, base_name):
-            if tiles_dict:
-                for (tx, ty), tile_img in tiles_dict.items():
+        def add_tiles_dict(tiles_snapshot, base_name):
+            if tiles_snapshot:
+                for (tx, ty), tile_img in tiles_snapshot:
                     def process_tile(img=tile_img, _tx=tx, _ty=ty):
-                        img_id = id(img)
-                        if img_id in canvas_state.tile_webp_cache:
-                            return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", canvas_state.tile_webp_cache[img_id])
+                        from scripts.canvas_state import get_tile_uid
+                        uid = get_tile_uid(img)
+                        with canvas_state._cache_lock:
+                            if uid in canvas_state.tile_webp_cache:
+                                return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", canvas_state.tile_webp_cache[uid])
                         img_io = BytesIO()
                         img.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
                         return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", img_io.getvalue())
                     futures.append(executor.submit(process_tile))
 
-        add_tiles_dict(canvas_state.tiles, "canvas")
-        add_tiles_dict(canvas_state.tiles_prev, "canvas_prev")
-        add_tiles_dict(canvas_state.tiles_now, "canvas_now")
+        with canvas_state.state_lock:
+            tiles_snap = list(canvas_state.tiles.items()) if canvas_state.tiles else []
+            tiles_prev_snap = list(canvas_state.tiles_prev.items()) if canvas_state.tiles_prev else []
+            tiles_now_snap = list(canvas_state.tiles_now.items()) if canvas_state.tiles_now else []
+            meta["canvas_bounds"] = canvas_state.canvas_bounds.copy()
+
+        add_tiles_dict(tiles_snap, "canvas")
+        add_tiles_dict(tiles_prev_snap, "canvas_prev")
+        add_tiles_dict(tiles_now_snap, "canvas_now")
 
         if mask_b64 and "," in mask_b64:
             try:
@@ -516,20 +525,28 @@ def _load_zip_into_canvas_state(filepath):
             tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
             if tile_names:
                 import concurrent.futures
-                def load_single_tile(name):
+                raw_tiles = []
+                for name in tile_names:
                     parts = name.replace(".webp", "").split("_")
                     tx, ty = int(parts[-2]) // 1024, int(parts[-1]) // 1024
-                    tile_data = zip_ref.read(name)
+                    raw_tiles.append((tx, ty, zip_ref.read(name)))
+
+                def decode_tile(tx, ty, tile_data):
                     tile_img = Image.open(BytesIO(tile_data))
                     if tile_img.mode != mode:
                         tile_img = tile_img.convert(mode)
+
+                    from scripts.canvas_state import get_tile_uid
+                    uid = get_tile_uid(tile_img)
+                    with canvas_state._cache_lock:
+                        canvas_state.tile_webp_cache[uid] = tile_data
+                    
                     return (tx, ty), tile_img
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    futures = [executor.submit(load_single_tile, name) for name in tile_names]
+                    futures = [executor.submit(decode_tile, tx, ty, data) for tx, ty, data in raw_tiles]
                     for future in concurrent.futures.as_completed(futures):
-                        tx, ty = future.result()[0]
-                        tile_img = future.result()[1]
+                        (tx, ty), tile_img = future.result()
                         tiles_dict[(tx, ty)] = tile_img
                 return tiles_dict
             
@@ -601,10 +618,12 @@ def api_load_project(p_name, recover_autosave=False, *args):
         meta, mask_b64 = _load_zip_into_canvas_state(filepath)
         print("[DEBUG] Successfully loaded zip into canvas state")
 
-        payload = canvas_state.get_tiles_payload()
+        import time
+        payload = canvas_state.get_tiles_payload(skip_autosave=True)
         payload["type"] = "project_load"
         payload["viewport"] = meta.get("viewport", {})
         payload["mask"] = mask_b64
+        payload["ts"] = time.time()
         
         print(f"[Infinite Canvas] Project loaded successfully ({len(canvas_state.tiles)} tiles, mask: {len(mask_b64)} bytes)")
 
@@ -669,8 +688,9 @@ def api_check_autosave():
     return status
 
 def api_check_project_autosave(p_name):
-    import os, json, re
-    if not p_name: return json.dumps({"has_newer": False})
+    import os, json, re, time
+    ts = time.time()
+    if not p_name: return json.dumps({"has_newer": False, "ts": ts})
     
     safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
     proj_path = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
@@ -681,11 +701,11 @@ def api_check_project_autosave(p_name):
         if os.path.exists(proj_path):
             proj_mtime = os.path.getmtime(proj_path)
             if autosave_mtime > proj_mtime:
-                return json.dumps({"has_newer": True})
+                return json.dumps({"has_newer": True, "ts": ts})
         else:
-            return json.dumps({"has_newer": True})
+            return json.dumps({"has_newer": True, "ts": ts})
             
-    return json.dumps({"has_newer": False})
+    return json.dumps({"has_newer": False, "ts": ts})
 
 def api_sam_predict(payload_json):
     if not payload_json: return ""

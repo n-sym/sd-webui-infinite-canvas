@@ -42,7 +42,7 @@ function icInitToastWrapper() {
     document.head.appendChild(style);
 }
 
-function icGetOrCreateToast(id, initialText = "Processing...", initialPct = "") {
+function icGetOrCreateToast(id, initialText = t("Processing..."), initialPct = "") {
     if (!icToastWrapper) icInitToastWrapper();
     let toast = document.getElementById(id);
     if (!toast) {
@@ -172,7 +172,7 @@ async function icPollProgress() {
             const pctElem = toast.querySelector('.ic-toast-pct');
             const barElem = toast.querySelector('.ic-toast-bar');
             
-            if (txtElem) txtElem.innerText = (typeof t === 'function' ? t(icLastValidStep) : icLastValidStep) || "Processing...";
+            if (txtElem) txtElem.innerText = (typeof t === 'function' ? t(icLastValidStep) : icLastValidStep) || t("Processing...");
             
             const pct = customPct >= 0 ? customPct : Math.max(0, Math.min(100, Math.round(data.progress * 100)));
             if (pctElem) pctElem.innerText = pct + '%';
@@ -221,7 +221,7 @@ window.icRenderToastState = function() {
     // This is exclusively for Autosave tracking now!
     if (window.icAutosaveStatusVal === 'saving') {
         const toast = icGetOrCreateToast('ic-autosave-toast');
-        toast.querySelector('.ic-toast-text').innerText = "Autosaving...";
+        toast.querySelector('.ic-toast-text').innerText = t("Autosaving...");
         toast.querySelector('.ic-toast-pct').innerText = '';
         toast.querySelector('.ic-toast-bar').classList.add('ic-toast-bar-indeterminate');
         icUpdateToastThemeForElement(toast, 'white');
@@ -229,7 +229,7 @@ window.icRenderToastState = function() {
         if (window.icAutosaveToastTimeout) clearTimeout(window.icAutosaveToastTimeout);
     } else if (window.icAutosaveStatusVal === 'done') {
         const toast = icGetOrCreateToast('ic-autosave-toast');
-        toast.querySelector('.ic-toast-text').innerText = "Autosaved successfully!";
+        toast.querySelector('.ic-toast-text').innerText = t("Autosaved successfully!");
         toast.querySelector('.ic-toast-pct').innerText = '';
         toast.querySelector('.ic-toast-bar').classList.remove('ic-toast-bar-indeterminate');
         toast.querySelector('.ic-toast-bar').style.width = '100%';

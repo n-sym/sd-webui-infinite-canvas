@@ -114,6 +114,7 @@
             if (!textarea || !textarea.value) return;
             try {
                 const projects = JSON.parse(textarea.value);
+                textarea.value = "";
                 projectsList.innerHTML = '';
                 if (projects.length === 0) {
                     projectsList.innerHTML = `<div style="padding: 30px 20px; text-align: center; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-size: 14px;">${typeof t === 'function' ? t('No projects found.') : 'No projects found.'}</div>`;
@@ -141,18 +142,34 @@
                     nameSpan.innerText = p.name;
                     
                     item.addEventListener('click', () => {
+                        if (window.ic_is_loading_or_saving) return;
+                        window.lockProjectUI();
+                        window.ic_pending_autosave_check = true;
+                        
                         const nameInput = document.querySelector('#ic_project_name_input textarea') || document.querySelector('#ic_project_name_input input');
                         if (nameInput) {
                             nameInput.value = p.name;
                             nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+                            nameInput.dispatchEvent(new Event('blur', { bubbles: true }));
                             
                             const visualNameInput = document.getElementById('ic-projects-name-input');
                             if (visualNameInput) visualNameInput.value = p.name;
                             
+                            // CLEAR autosave output DOM and Gradio state safely to prevent premature firing
+                            const autosaveCheckOutput = document.getElementById('ic_check_autosave_output');
+                            if (autosaveCheckOutput) {
+                                const outArea = autosaveCheckOutput.querySelector('textarea') || autosaveCheckOutput.querySelector('input');
+                                if (outArea) {
+                                    outArea.value = "";
+                                    outArea.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            }
+                            
                             setTimeout(() => {
                                 const checkBtn = document.getElementById('ic_check_autosave_hidden_btn');
                                 if (checkBtn) checkBtn.click();
-                            }, 100);
+                            }, 50);
                             
                             projectsModal.style.display = 'none';
                         }
@@ -174,6 +191,9 @@
         const observer = new MutationObserver(() => {
             const textarea = autosaveCheckOutput.querySelector('textarea') || autosaveCheckOutput.querySelector('input');
             if (!textarea || !textarea.value) return;
+            if (!window.ic_pending_autosave_check) return;
+            window.ic_pending_autosave_check = false;
+
             try {
                 const data = JSON.parse(textarea.value);
                 const recoverModal = document.getElementById('ic-recover-modal');
@@ -192,7 +212,7 @@
                 }
             } catch (e) {
                 console.error("Error parsing autosave check output", e);
-            }
+            } 
         });
         observer.observe(autosaveCheckOutput, { childList: true, subtree: true, attributes: true, characterData: true });
     }
@@ -220,9 +240,24 @@
     setupRecoverBtn('ic-recover-btn-yes', true);
     setupRecoverBtn('ic-recover-btn-no', false);
     
+    window.ic_is_loading_or_saving = false;
+    window.lockProjectUI = function() {
+        window.ic_is_loading_or_saving = true;
+        const btn = document.getElementById('ic_float_projects');
+        if (btn) btn.classList.add('disabled-state');
+    };
+    window.unlockProjectUI = function() {
+        window.ic_is_loading_or_saving = false;
+        const btn = document.getElementById('ic_float_projects');
+        if (btn) btn.classList.remove('disabled-state');
+    };
+    
     const saveProjectBtn = document.getElementById('ic-projects-save-btn');
     if (saveProjectBtn) {
         saveProjectBtn.addEventListener('click', () => {
+            if (window.ic_is_loading_or_saving) return;
+            window.lockProjectUI();
+            
             const nameField = document.getElementById('ic-projects-name-input');
             const targetName = nameField ? nameField.value : 'project';
             
@@ -250,7 +285,7 @@
                 setTimeout(() => {
                     const hiddenSaveBtn = document.getElementById('ic_save_project_hidden_btn');
                     if (hiddenSaveBtn) hiddenSaveBtn.click();
-                }, 100);
+                }, 50);
             }
             projectsModal.style.display = 'none';
         });
@@ -259,6 +294,7 @@
     const importBtn = document.getElementById('ic-projects-import-btn');
     if (importBtn) {
         importBtn.addEventListener('click', () => {
+            if (window.ic_is_loading_or_saving) return;
             const hiddenImport = document.querySelector('#ic_import_file input[type="file"]');
             if (hiddenImport) hiddenImport.click();
             projectsModal.style.display = 'none';

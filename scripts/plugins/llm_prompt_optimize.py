@@ -34,9 +34,9 @@ class LLMPromptOptimizeStep(GenerationStep):
         return {
             "enabled": bool(raw_params.get("enabled", False)),
             "enable_cache": bool(raw_params.get("enable_cache", True)),
-            "api_url": str(raw_params.get("api_url", "https://api.openai.com/v1/chat/completions")),
+            "api_url": str(raw_params.get("api_url", "https://api.deepseek.com/chat/completions")),
             "api_key": str(raw_params.get("api_key", "")),
-            "model": str(raw_params.get("model", "gpt-3.5-turbo")),
+            "model": str(raw_params.get("model", "deepseek-v4-flash")),
             "detail_richness": float(raw_params.get("detail_richness", 0.5)),
             "prompt_fidelity": float(raw_params.get("prompt_fidelity", 0.5)),
             "nl_style": str(raw_params.get("nl_style", "Mixed")),

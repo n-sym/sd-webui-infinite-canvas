@@ -44,12 +44,23 @@ def distance_based_blur_fill(image: Image.Image, mask: Image.Image) -> Image.Ima
     
     return Image.fromarray(final_arr)
 
+import gradio as gr
+import base64
 import os
 import concurrent.futures
+import uuid
+
+def get_tile_uid(tile):
+    if not hasattr(tile, 'ic_uid'):
+        tile.ic_uid = uuid.uuid4().hex
+    return tile.ic_uid
 
 class CanvasState:
     def __init__(self):
+        import collections, threading
         self.TILE_SIZE = 1024
+        
+        self.state_lock = threading.Lock()
         self.tiles = {}  # {(tx, ty): PIL.Image}
         self.tiles_prev = None
         self.tiles_now = None
@@ -63,11 +74,12 @@ class CanvasState:
         self.current_project_name = "project"
         
         # Background WebP compression
+        self._cache_lock = threading.Lock()
         max_workers = max(1, os.cpu_count() // 4) if os.cpu_count() else 2
         self.compression_executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         self.autosave_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self.tile_webp_cache = {}  # {img_id: webp_bytes}
-        self.pending_compressions = {}  # {img_id: Future}
+        self.tile_webp_cache = {}  # {(tx, ty): webp_bytes}
+        self.pending_compressions = {}  # {(tx, ty): Future}
         self.autosave_enabled = True
         self.autosave_status = "idle"
 
@@ -78,82 +90,104 @@ class CanvasState:
         os.makedirs(self.projects_dir, exist_ok=True)
         os.makedirs(self.autosaves_dir, exist_ok=True)
 
+
+
     def trigger_background_compression(self):
-        all_dicts = [self.tiles]
-        if self.tiles_prev: all_dicts.append(self.tiles_prev)
-        if self.tiles_now: all_dicts.append(self.tiles_now)
-        
-        for d in all_dicts:
-            for _, tile in list(d.items()):
-                t_id = id(tile)
-                if t_id in self.tile_webp_cache:
+        with self.state_lock:
+            all_tiles_snapshot = []
+            if self.tiles: all_tiles_snapshot.extend(list(self.tiles.values()))
+            if self.tiles_prev: all_tiles_snapshot.extend(list(self.tiles_prev.values()))
+            if self.tiles_now: all_tiles_snapshot.extend(list(self.tiles_now.values()))
+            
+            unique_tiles = {}
+            for t in all_tiles_snapshot:
+                uid = get_tile_uid(t)
+                unique_tiles[uid] = t.copy()
+
+        for uid, t_img in unique_tiles.items():
+            with self._cache_lock:
+                if uid in self.tile_webp_cache:
                     continue
-                
-                t_img_copy = tile.copy()
-                def compress_task(t_img=t_img_copy, t_id=t_id):
-                    from io import BytesIO
-                    img_io = BytesIO()
-                    t_img.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
-                    self.tile_webp_cache[t_id] = img_io.getvalue()
-                    
-                future = self.compression_executor.submit(compress_task)
-                self.pending_compressions[t_id] = future
+                if uid in self.pending_compressions and not self.pending_compressions[uid].done():
+                    continue
+
+            def compress_task(t_img=t_img, uid=uid):
+                from io import BytesIO
+                img_io = BytesIO()
+                t_img.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
+                with self._cache_lock:
+                    self.tile_webp_cache[uid] = img_io.getvalue()
+
+            future = self.compression_executor.submit(compress_task)
+            with self._cache_lock:
+                self.pending_compressions[uid] = future
 
         if getattr(self, "pending_data", None) is not None:
             return
-            
-        if not self.tiles:
-            return
-            
-        state_snapshot = {
-            "tiles": {(tx, ty): id(tile) for (tx, ty), tile in self.tiles.items()},
-            "tiles_prev": {(tx, ty): id(tile) for (tx, ty), tile in self.tiles_prev.items()} if self.tiles_prev else {},
-            "tiles_now": {(tx, ty): id(tile) for (tx, ty), tile in self.tiles_now.items()} if self.tiles_now else {},
-            "canvas_bounds": self.canvas_bounds,
-            "workflow": self.workflow,
-            "step_params": self.step_params
-        }
-        
-        # Collect futures we must wait for
-        futures_to_wait = []
-        all_ids = set()
-        for d in [state_snapshot["tiles"], state_snapshot["tiles_prev"], state_snapshot["tiles_now"]]:
-            all_ids.update(d.values())
-            
-        for t_id in all_ids:
-            if t_id in self.pending_compressions:
-                futures_to_wait.append(self.pending_compressions[t_id])
-                
+
+        with self.state_lock:
+            if not self.tiles:
+                return
+            state_snapshot = {
+                "tiles": {k: get_tile_uid(v) for k, v in self.tiles.items()} if self.tiles else {},
+                "tiles_prev": {k: get_tile_uid(v) for k, v in self.tiles_prev.items()} if self.tiles_prev else {},
+                "tiles_now": {k: get_tile_uid(v) for k, v in self.tiles_now.items()} if self.tiles_now else {},
+                "canvas_bounds": self.canvas_bounds.copy(),
+                "workflow": self.workflow.copy(),
+                "step_params": self.step_params.copy()
+            }
+
         def autosave_task():
             self.autosave_status = "saving"
             try:
-                import zipfile
-                import json
+                import zipfile, json
                 from io import BytesIO
+
+                uids_to_wait = set()
+                uids_to_wait.update(state_snapshot["tiles"].values())
+                uids_to_wait.update(state_snapshot["tiles_prev"].values())
+                uids_to_wait.update(state_snapshot["tiles_now"].values())
                 
+                futures_to_wait = []
+                with self._cache_lock:
+                    for uid in uids_to_wait:
+                        if uid in self.pending_compressions:
+                            futures_to_wait.append(self.pending_compressions[uid])
+                            
                 for f in futures_to_wait:
                     f.result()
                     
+                with self._cache_lock:
+                    active_uids = uids_to_wait
+                    keys_to_delete = [k for k in self.tile_webp_cache.keys() if k not in active_uids]
+                    for k in keys_to_delete:
+                        del self.tile_webp_cache[k]
+                    keys_to_delete_pending = [k for k in self.pending_compressions.keys() if k not in active_uids and self.pending_compressions[k].done()]
+                    for k in keys_to_delete_pending:
+                        del self.pending_compressions[k]
+
                 zip_buffer = BytesIO()
+
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                    def add_to_zip(tiles_dict, base_name):
-                        if tiles_dict:
-                            for (tx, ty), img_id in tiles_dict.items():
-                                webp_bytes = self.tile_webp_cache.get(img_id)
+                    def add_to_zip(uid_dict, base_name):
+                        if uid_dict:
+                            for (tx, ty), uid in uid_dict.items():
+                                with self._cache_lock:
+                                    webp_bytes = self.tile_webp_cache.get(uid)
                                 if webp_bytes:
                                     zip_file.writestr(f"{base_name}_t_{tx * 1024}_{ty * 1024}.webp", webp_bytes)
-                                    
+
                     add_to_zip(state_snapshot["tiles"], "canvas")
                     add_to_zip(state_snapshot["tiles_prev"], "canvas_prev")
                     add_to_zip(state_snapshot["tiles_now"], "canvas_now")
-                    
+
                     meta = {
                         "canvas_bounds": state_snapshot["canvas_bounds"],
                         "workflow": state_snapshot["workflow"],
                         "step_params": state_snapshot["step_params"]
                     }
                     zip_file.writestr("meta.json", json.dumps(meta, indent=2))
-                    
+
                 import os
                 import re
                 safe_name = re.sub(r'[^\w\-_\. ]', '_', self.current_project_name)
@@ -161,7 +195,7 @@ class CanvasState:
                 autosave_path = os.path.join(self.autosaves_dir, f"{safe_name}.infcanvas")
                 with open(autosave_path, "wb") as f:
                     f.write(zip_buffer.getvalue())
-                    
+
                 print(f"[Infinite Canvas] Autosaved background project successfully to {autosave_path}.")
             except Exception as e:
                 print(f"[Infinite Canvas] Autosave failed: {e}")
@@ -171,9 +205,10 @@ class CanvasState:
         self.autosave_executor.submit(autosave_task)
 
     def clear(self):
-        self.tiles = {}
-        self.tiles_prev = None
-        self.tiles_now = None
+        with self.state_lock:
+            self.tiles = {}
+            self.tiles_prev = None
+            self.tiles_now = None
         self.pending_data = None
         self.canvas_bounds = {"x": 0, "y": 0, "w": 1024, "h": 1024}
         self.is_dirty = False
@@ -188,7 +223,13 @@ class CanvasState:
     def _clone_tiles(self, source_tiles):
         if source_tiles is None:
             return None
-        return {k: v.copy() for k, v in source_tiles.items()}
+        res = {}
+        for k, v in source_tiles.items():
+            new_v = v.copy()
+            if hasattr(v, 'ic_uid'):
+                new_v.ic_uid = v.ic_uid
+            res[k] = new_v
+        return res
 
     def _update_bounds(self, x, y, w, h):
         cx, cy, cw, ch = self.canvas_bounds['x'], self.canvas_bounds['y'], self.canvas_bounds['w'], self.canvas_bounds['h']
@@ -252,9 +293,10 @@ class CanvasState:
         thumb.save(buffered, format="PNG", compress_level=1)
         return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-    def get_tiles_payload(self):
+    def get_tiles_payload(self, skip_autosave=False):
         """Returns all tiles as base64 strings."""
-        self.trigger_background_compression()
+        if not skip_autosave:
+            self.trigger_background_compression()
         import concurrent.futures
         payload = {"type": "tiles_update", "tiles": []}
         
@@ -351,28 +393,31 @@ class CanvasState:
         start_ty = math.floor(y1 / self.TILE_SIZE)
         end_ty = math.floor(y2 / self.TILE_SIZE)
         
-        for ty in range(start_ty, end_ty + 1):
-            for tx in range(start_tx, end_tx + 1):
-                tile_x = tx * self.TILE_SIZE
-                tile_y = ty * self.TILE_SIZE
-                
-                crop_x1 = max(0, tile_x - x1)
-                crop_y1 = max(0, tile_y - y1)
-                crop_x2 = min(w, tile_x + self.TILE_SIZE - x1)
-                crop_y2 = min(h, tile_y + self.TILE_SIZE - y1)
-                
-                if crop_x1 < crop_x2 and crop_y1 < crop_y2:
-                    crop = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
-                    if mask:
-                        crop_mask = mask.crop((crop_x1, crop_y1, crop_x2, crop_y2))
-                    else:
-                        crop_mask = crop if crop.mode == 'RGBA' else None
-                        
-                    tile = self._get_tile(tx, ty).copy()
-                    paste_x = max(0, x1 - tile_x)
-                    paste_y = max(0, y1 - tile_y)
-                    tile.paste(crop, (paste_x, paste_y), mask=crop_mask)
-                    self.tiles[(tx, ty)] = tile
+        with self.state_lock:
+            for ty in range(start_ty, end_ty + 1):
+                for tx in range(start_tx, end_tx + 1):
+                    tile_x = tx * self.TILE_SIZE
+                    tile_y = ty * self.TILE_SIZE
+                    
+                    crop_x1 = max(0, tile_x - x1)
+                    crop_y1 = max(0, tile_y - y1)
+                    crop_x2 = min(w, tile_x + self.TILE_SIZE - x1)
+                    crop_y2 = min(h, tile_y + self.TILE_SIZE - y1)
+                    
+                    if crop_x1 < crop_x2 and crop_y1 < crop_y2:
+                        crop = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+                        if mask:
+                            crop_mask = mask.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+                        else:
+                            crop_mask = crop if crop.mode == 'RGBA' else None
+                            
+                        tile = self._get_tile(tx, ty).copy()
+                        if hasattr(tile, 'ic_uid'):
+                            delattr(tile, 'ic_uid')
+                        paste_x = max(0, x1 - tile_x)
+                        paste_y = max(0, y1 - tile_y)
+                        tile.paste(crop, (paste_x, paste_y), mask=crop_mask)
+                        self.tiles[(tx, ty)] = tile
 
     def prepare_generation(self, source_rect, target_rect, generation_res=1024, upscaler_name="None", mask_base64="", auto_scale=True, outpaint_pad="全黑 (Black)"):
         """
