@@ -609,16 +609,31 @@ const IC_ICONS = {
         document.getElementById('ic_float_mask_redo')?.addEventListener('click', redoMask);
 
         // Keyboard shortcuts for mask undo/redo: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+        // Also track backtick (`) for debug info
+        window.ic_show_debug_info = false;
         document.addEventListener('keydown', (e) => {
             // Only handle when the canvas container is visible and no modal/input is focused
             const active = document.activeElement;
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+            if (e.key === '`') {
+                if (!window.ic_show_debug_info) {
+                    window.ic_show_debug_info = true;
+                    if (typeof draw === 'function') draw();
+                }
+            }
             if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
                 e.preventDefault();
                 undoMask();
             } else if ((e.ctrlKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) || (e.ctrlKey && e.key === 'y')) {
                 e.preventDefault();
                 redoMask();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === '`') {
+                window.ic_show_debug_info = false;
+                if (typeof draw === 'function') draw();
             }
         });
         

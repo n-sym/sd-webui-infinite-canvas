@@ -116,6 +116,33 @@
                 ctx.stroke();
             }
             
+            if (window.ic_show_debug_info) {
+                ctx.save();
+                ctx.setLineDash([]);
+                const ratioW = sourceRect.w / genSize.w;
+                const ratioH = sourceRect.h / genSize.h;
+                const ratio = ((ratioW + ratioH) / 2).toFixed(2);
+                const text = `Logical: ${Math.round(sourceRect.w)}x${Math.round(sourceRect.h)} | Gen: ${genSize.w}x${genSize.h} | Scale: ${ratio}`;
+                
+                ctx.font = `${14 / scale}px Arial`;
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                
+                const padding = 5 / scale;
+                const textW = ctx.measureText(text).width;
+                const textH = 16 / scale;
+                
+                const textX = sourceRect.w / 2 - padding;
+                const textY = -sourceRect.h / 2 - padding;
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(textX - textW - padding, textY - textH, textW + padding * 2, textH + padding);
+                
+                ctx.fillStyle = '#00FFCC';
+                ctx.fillText(text, textX, textY);
+                ctx.restore();
+            }
+            
             ctx.restore();
         }
         

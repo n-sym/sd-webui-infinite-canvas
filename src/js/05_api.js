@@ -149,9 +149,8 @@
                         const nameInput = document.querySelector('#ic_project_name_input textarea') || document.querySelector('#ic_project_name_input input');
                         if (nameInput) {
                             nameInput.value = p.name;
-                            nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-                            nameInput.dispatchEvent(new Event('change', { bubbles: true }));
-                            nameInput.dispatchEvent(new Event('blur', { bubbles: true }));
+                            if (typeof updateInput === 'function') updateInput(nameInput);
+                            else nameInput.dispatchEvent(new Event('input', { bubbles: true }));
                             
                             const visualNameInput = document.getElementById('ic-projects-name-input');
                             if (visualNameInput) visualNameInput.value = p.name;
@@ -162,14 +161,12 @@
                                 const outArea = autosaveCheckOutput.querySelector('textarea') || autosaveCheckOutput.querySelector('input');
                                 if (outArea) {
                                     outArea.value = "";
-                                    outArea.dispatchEvent(new Event('input', { bubbles: true }));
+                                    if (typeof updateInput === 'function') updateInput(outArea);
+                                    else outArea.dispatchEvent(new Event('input', { bubbles: true }));
                                 }
                             }
-                            
-                            setTimeout(() => {
-                                const checkBtn = document.getElementById('ic_check_autosave_hidden_btn');
-                                if (checkBtn) checkBtn.click();
-                            }, 50);
+                            const checkBtn = document.getElementById('ic_check_autosave_hidden_btn');
+                            if (checkBtn) checkBtn.click();
                             
                             projectsModal.style.display = 'none';
                         }
@@ -264,7 +261,8 @@
             const nameInput = document.querySelector('#ic_project_name_input textarea') || document.querySelector('#ic_project_name_input input');
             if (nameInput) {
                 nameInput.value = targetName;
-                nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                if (typeof updateInput === 'function') updateInput(nameInput);
+                else nameInput.dispatchEvent(new Event('input', { bubbles: true }));
             }
             
             const payload = {
@@ -280,12 +278,10 @@
             if (payloadInput) {
                 if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Saving project...") : "Saving project...", 0, 'white', 'ic-save-toast');
                 payloadInput.value = JSON.stringify(payload);
-                payloadInput.dispatchEvent(new Event('input', { bubbles: true }));
-                
-                setTimeout(() => {
-                    const hiddenSaveBtn = document.getElementById('ic_save_project_hidden_btn');
-                    if (hiddenSaveBtn) hiddenSaveBtn.click();
-                }, 50);
+                if (typeof updateInput === 'function') updateInput(payloadInput);
+                else payloadInput.dispatchEvent(new Event('input', { bubbles: true }));
+                const hiddenSaveBtn = document.getElementById('ic_save_project_hidden_btn');
+                if (hiddenSaveBtn) hiddenSaveBtn.click();
             }
             projectsModal.style.display = 'none';
         });

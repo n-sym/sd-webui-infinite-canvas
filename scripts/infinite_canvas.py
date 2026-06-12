@@ -374,14 +374,14 @@ def on_ui_tabs():
                     fn=make_dynamic('api_save_project'),
                     inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name_input, ic_auto_scale],
                     outputs=[dummy_component],
-                    js="() => { if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Saving project...') : 'Saving project...'), 0, 'white', 'ic-save-toast'); return []; }"
+                    js="(...args) => { if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Saving project...') : 'Saving project...'), 0, 'white', 'ic-save-toast'); return args; }"
                 ).success(
                     fn=make_dynamic('api_list_projects_json'),
                     inputs=[],
                     outputs=[ic_projects_json_output]
                 ).success(
                     fn=None,
-                    js="() => { window.unlockProjectUI && window.unlockProjectUI(); if(window.icShowCustomToast) { window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Project saved successfully!') : 'Project saved successfully!'), 3000, 'white', 'ic-save-toast'); let t_el = document.getElementById('ic-save-toast'); if(t_el){ t_el.querySelector('.ic-toast-bar').parentNode.style.display = 'none'; t_el.children[0].style.marginBottom = '0'; } } return []; }",
+                    js="(...args) => { window.unlockProjectUI && window.unlockProjectUI(); if(window.icShowCustomToast) { window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Project saved successfully!') : 'Project saved successfully!'), 3000, 'white', 'ic-save-toast'); let t_el = document.getElementById('ic-save-toast'); if(t_el){ t_el.querySelector('.ic-toast-bar').parentNode.style.display = 'none'; t_el.children[0].style.marginBottom = '0'; } } return args; }",
                     inputs=[],
                     outputs=[]
                 )
@@ -390,7 +390,7 @@ def on_ui_tabs():
                     fn=lambda: gr.update(value=''), # Clear #ic_output to ensure new payload is detected
                     inputs=None,
                     outputs=[payload_output],
-                    js="() => { window.lockProjectUI && window.lockProjectUI(); if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Loading project...') : 'Loading project...'), 0, 'white', 'ic-load-toast'); return []; }"
+                    js="(...args) => { window.lockProjectUI && window.lockProjectUI(); if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Loading project...') : 'Loading project...'), 0, 'white', 'ic-load-toast'); return args; }"
                 ).then(
                     fn=make_dynamic('api_load_project'),
                     inputs=[ic_project_name_input, ic_recover_autosave_input],
@@ -401,7 +401,7 @@ def on_ui_tabs():
                     outputs=[payload_output]
                 ).success(
                     fn=None,
-                    js="() => { window.unlockProjectUI && window.unlockProjectUI(); return []; }",
+                    js="(...args) => { window.unlockProjectUI && window.unlockProjectUI(); return args; }",
                     inputs=[],
                     outputs=[]
                 )
@@ -416,7 +416,7 @@ def on_ui_tabs():
                     fn=lambda: gr.update(value=''),
                     inputs=None,
                     outputs=[payload_output],
-                    js="() => { window.lockProjectUI && window.lockProjectUI(); if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Loading project...') : 'Loading project...'), 0, 'white', 'ic-load-toast'); return []; }"
+                    js="(...args) => { window.lockProjectUI && window.lockProjectUI(); if(window.icShowCustomToast) window.icShowCustomToast((window.__ic_i18n ? window.__ic_i18n('Loading project...') : 'Loading project...'), 0, 'white', 'ic-load-toast'); return args; }"
                 ).then(
                     fn=make_dynamic('api_import_project'),
                     inputs=[ic_import_file],
@@ -427,7 +427,7 @@ def on_ui_tabs():
                     outputs=[payload_output]
                 ).success(
                     fn=None,
-                    js="() => { window.unlockProjectUI && window.unlockProjectUI(); return []; }",
+                    js="(...args) => { window.unlockProjectUI && window.unlockProjectUI(); return args; }",
                     inputs=[],
                     outputs=[]
                 )
