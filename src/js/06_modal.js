@@ -13,19 +13,7 @@
         let showEdgeMask = false;
         let featherRadius = 0;
         
-        // Setup Session Modal
-        const sessionModal = document.getElementById('ic-session-modal');
-        const sessionPreview = document.getElementById('ic-session-preview');
-        if (sessionModal) {
-            document.getElementById('ic-session-yes').addEventListener('click', () => {
-                sessionModal.style.display = 'none';
-                document.getElementById('ic_restore_session_btn')?.click();
-            });
-            document.getElementById('ic-session-no').addEventListener('click', () => {
-                sessionModal.style.display = 'none';
-                document.getElementById('ic_clear_session_btn')?.click();
-            });
-        }
+
         
         // Setup Feather slider
         const featherSlider = document.getElementById('ic-modal-feather');
@@ -43,6 +31,50 @@
                 }
             });
         }
+        // Setup Dynamic Modal
+        const dynamicModal = document.getElementById('ic_dynamic_modal');
+        const dynamicModalTitle = document.getElementById('ic_dynamic_modal_title');
+        const dynamicModalContent = document.getElementById('ic_dynamic_modal_content');
+        
+        window.ic_continue_generation = function(session_id, result_data) {
+            if (dynamicModal) dynamicModal.style.display = 'none';
+            window.exist_pending_generation = false;
+            
+            const resumePayload = Object.assign({ session_id: session_id }, result_data);
+            
+            const payloadArea = document.querySelector('#ic_resume_payload textarea');
+            if (payloadArea) {
+                payloadArea.value = JSON.stringify(resumePayload);
+                payloadArea.dispatchEvent(new Event('input', {bubbles: true}));
+            }
+            
+            // re-arm progress toast if continuing
+            if (result_data && result_data.action !== 'cancel') {
+                window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + ")";
+                if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
+                if (typeof requestProgress === 'function') {
+                    requestProgress(
+                        window.ic_current_task_id,
+                        document.getElementById("ic-dummy-inner"),
+                        null,
+                        function() {
+                            window.ic_current_task_id = null;
+                            const toast = document.getElementById('ic-progress-toast');
+                            if (toast && !window.exist_pending_generation) toast.style.display = 'none';
+                            if (typeof showSubmitButtons === 'function' && !window.exist_pending_generation) showSubmitButtons("ic", true);
+                        }
+                    );
+                }
+            } else {
+                if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", true);
+            }
+            
+            setTimeout(() => {
+                const triggerBtn = document.getElementById('ic_resume_trigger');
+                if (triggerBtn) triggerBtn.click();
+            }, 50);
+        };
+
         
         function onModalImageLoad() {
             imagesLoaded++;
@@ -81,7 +113,12 @@
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
             ctx.lineWidth = 2 / scale;
-            ctx.setLineDash([5 / scale, 5 / scale]);
+            const genSize = typeof getGenSize === 'function' ? getGenSize() : {w: 1024, h: 1024};
+            if (Math.abs(w - genSize.w) < 1 && Math.abs(h - genSize.h) < 1 && Math.abs(angle) < 0.001) {
+                ctx.setLineDash([]);
+            } else {
+                ctx.setLineDash([5 / scale, 5 / scale]);
+            }
             if (angle) {
                 ctx.translate(x + w/2, y + h/2);
                 ctx.rotate(angle);
@@ -225,7 +262,13 @@
                             // Re-use drawBlueBox logic but adjusted for center coordinates
                             mctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
                             mctx.lineWidth = 2 / currentScale;
-                            mctx.setLineDash([5 / currentScale, 5 / currentScale]);
+                            const genSize = typeof getGenSize === 'function' ? getGenSize() : {w: 1024, h: 1024};
+                            const currentAngle = sourceRect.angle || 0;
+                            if (Math.abs(pendingPatchImage.width - genSize.w) < 1 && Math.abs(pendingPatchImage.height - genSize.h) < 1 && Math.abs(currentAngle) < 0.001) {
+                                mctx.setLineDash([]);
+                            } else {
+                                mctx.setLineDash([5 / currentScale, 5 / currentScale]);
+                            }
                             mctx.strokeRect(-pendingPatchImage.width / 2, -pendingPatchImage.height / 2, pendingPatchImage.width, pendingPatchImage.height);
                             
                             mctx.restore();
@@ -341,7 +384,8 @@
                 try {
                     const data = JSON.parse(text);
                     
-                    // Helper to populate tiles
+                    if (window.icStartAutosavePoller) window.icStartAutosavePoller();
+                    
                     const populateTiles = (tilesArray) => {
                         window.ic_tiles = {};
                         if (!tilesArray) return;
@@ -352,16 +396,48 @@
                             img.src = t.data;
                             window.ic_tiles[`${t.tx},${t.ty}`] = img;
                         }
+                        if (tilesArray.length === 0 && typeof draw === 'function') {
+                            draw();
+                        }
                     };
 
-                    if (data.type === 'session_check') {
-                        if (data.has_session) {
-                            sessionPreview.src = data.preview;
-                            sessionModal.style.display = 'flex';
-                        }
-                    } else if (data.type === 'session_restore' || data.type === 'session_clear' || data.type === 'session_cleared' || data.type === 'toggle' || data.type === 'upload' || data.type === 'discard' || data.type === 'apply') {
+                    if (data.type === 'toggle' || data.type === 'upload' || data.type === 'discard' || data.type === 'apply' || data.type === 'project_load' || data.type === 'session_cleared') {
                         if (data.tiles) {
                             populateTiles(data.tiles);
+                        }
+                        
+                        if (data.type === 'project_load') {
+                            if (window.icHideToast) {
+                                icHideToast('ic-autosave-toast');
+                                icHideToast('ic-save-toast');
+                            }
+                            if (window.icShowCustomToast) {
+                                window.icShowCustomToast(typeof t === 'function' ? t("Project loaded successfully!") : "Project loaded successfully!", 3000, 'white', 'ic-load-toast');
+                                let toast = document.getElementById('ic-load-toast');
+                                if (toast) {
+                                    toast.querySelector('.ic-toast-bar').parentNode.style.display = 'none';
+                                    toast.children[0].style.marginBottom = '0';
+                                }
+                            }
+                        }
+                        
+                        if (data.type === 'session_clear' || data.type === 'session_cleared') {
+                            scale = 1;
+                            offsetX = 0;
+                            offsetY = 0;
+                            
+                            sourceRect.x = 0;
+                            sourceRect.y = 0;
+                            sourceRect.w = 1024;
+                            sourceRect.h = 1024;
+                            sourceRect.angle = 0;
+                            
+                            maskDataCanvas.width = 1024;
+                            maskDataCanvas.height = 1024;
+                            maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
+                            maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
+                            
+                            if (typeof draw === 'function') draw();
                         }
                     } else if (data.type === 'preview') {
                         // Delay applying! Show Modal instead.
@@ -392,6 +468,24 @@
                         
                         modalVisible = true;
                         modalOverlay.style.display = 'flex';
+                    } else if (data.type === 'dynamic_dialog') {
+                        window.exist_pending_generation = true;
+                        if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
+                        
+                        if (dynamicModalTitle) dynamicModalTitle.innerText = data.title || "Dialog";
+                        if (dynamicModalContent) dynamicModalContent.innerHTML = data.html || "";
+                        if (dynamicModal) dynamicModal.style.display = 'flex';
+                        
+                        if (data.js) {
+                            try {
+                                const fn = new Function('session_id', 'modal', data.js);
+                                fn(data.session_id, dynamicModal);
+                            } catch(e) {
+                                console.error("[Infinite Canvas] Error executing dynamic dialog JS:", e);
+                            }
+                        }
+
+                        
                     } else if (data.type === 'project_load') {
                         // Suppress enforceSourceRatio() during the entire load.
                         window._ic_project_load_suppress = true;

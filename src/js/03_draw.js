@@ -12,6 +12,15 @@
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
+        // Sync CSS Background Grid (Photoshop style)
+        const container = document.getElementById('ic-container');
+        if (container) {
+            const bgSize = 16 * scale;
+            const halfSize = 8 * scale;
+            container.style.backgroundSize = `${bgSize}px ${bgSize}px`;
+            container.style.backgroundPosition = `${offsetX}px ${offsetY}px, ${offsetX + halfSize}px ${offsetY + halfSize}px`;
+        }
+        
         // Draw Image Tiles
         const TILE_SIZE = 1024;
         if (window.ic_tiles) {
@@ -85,7 +94,13 @@
             
             ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
             ctx.lineWidth = 2 / scale;
-            ctx.setLineDash([5 / scale, 5 / scale]);
+            const genSize = typeof getGenSize === 'function' ? getGenSize() : {w: 1024, h: 1024};
+            const angle = sourceRect.angle || 0;
+            if (Math.abs(sourceRect.w - genSize.w) < 1 && Math.abs(sourceRect.h - genSize.h) < 1 && Math.abs(angle) < 0.001) {
+                ctx.setLineDash([]);
+            } else {
+                ctx.setLineDash([5 / scale, 5 / scale]);
+            }
             ctx.strokeRect(-sourceRect.w / 2, -sourceRect.h / 2, sourceRect.w, sourceRect.h);
             
             if (isRotatingSource) {

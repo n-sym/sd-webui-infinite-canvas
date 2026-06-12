@@ -4,14 +4,15 @@ const workflowStyle = document.createElement('style');
 workflowStyle.textContent = `
     .ic-pipeline-node {
         padding: 8px 12px;
-        border-radius: 8px;
+        border-radius: 16px;
         font-size: 13px;
         font-weight: 600;
         transition: all 0.2s ease;
         /* Default to Light Mode (Cute Pastel) */
         background-color: hsl(var(--node-hue), 85%, 92%);
         color: hsl(var(--node-hue), 85%, 25%);
-        border: 1px solid hsla(var(--node-hue), 85%, 75%, 0.8);
+        --ic-border-color: hsla(var(--node-hue), 85%, 70%, 0.8);
+        --ic-glow-color: hsla(var(--node-hue), 85%, 98%, 0.9);
         box-shadow: inset 0 0 5px rgba(255,255,255,0.5), 0 1px 3px rgba(0,0,0,0.05);
     }
     
@@ -19,7 +20,8 @@ workflowStyle.textContent = `
     .dark .ic-pipeline-node {
         background-color: hsl(var(--node-hue), 45%, 22%);
         color: #f0f0f0;
-        border: 1px solid hsla(var(--node-hue), 45%, 40%, 0.5);
+        --ic-border-color: hsla(var(--node-hue), 45%, 45%, 0.8);
+        --ic-glow-color: hsla(var(--node-hue), 45%, 70%, 0.6);
         box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
     }
     
@@ -31,7 +33,7 @@ workflowStyle.textContent = `
         border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important;
         color: var(--body-text-color, #fff) !important;
         padding: 6px 28px 6px 10px !important;
-        border-radius: 8px !important;
+        border-radius: 16px !important;
         font-size: 13px !important;
         font-weight: 500 !important;
         cursor: pointer !important;
@@ -128,15 +130,14 @@ function updateWorkflowUI(data, container) {
     html += `</div>`;
     
     // Build Settings HTML
-    let settingsHtml = `<div style="margin-top: 15px; border-top: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); padding-top: 10px;">`;
-    settingsHtml += `<h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 500; color: var(--body-text-color-subdued, #888);">${t('Plugin Settings')}</h4>`;
+    let settingsHtml = `<div style="padding-top: 55px;">`;
+    // (Heading removed per user request)
 
     registry.forEach(plugin => {
         if (!plugin.is_plugin) return;
         
-        settingsHtml += `<div style="margin-bottom: 10px; padding: 12px; background: var(--background-fill-secondary, rgba(128,128,128,0.1)); border-radius: 8px; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">`;
-        settingsHtml += `<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: var(--body-text-color, #fff);">${t(plugin.name)}</div>`;
-        
+        settingsHtml += `<div class="ic-plugin-setting-group fluent-card" style="margin-bottom: 10px; padding: 12px; background: var(--background-fill-secondary, rgba(128,128,128,0.1)); border-radius: 16px; cursor: pointer; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2));" onclick="if(event.target.closest('input') || event.target.closest('select')) return; const cb = this.querySelector('input[data-param-name=\\'enabled\\']'); if(cb) cb.click();">`;
+        settingsHtml += `<div class="fluent-content" style="width:100%; height:100%;">`;
         const pValues = stepParams[plugin.id] || {};
         
         let isPluginEnabled = true;
@@ -144,34 +145,40 @@ function updateWorkflowUI(data, container) {
         if (enabledParam) {
             isPluginEnabled = pValues['enabled'] !== undefined ? pValues['enabled'] : enabledParam.default;
         }
+
+        settingsHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">`;
+        settingsHtml += `<div style="font-weight: 600; font-size: 14px; color: var(--body-text-color, #fff);">${t(plugin.name)}</div>`;
+        if (enabledParam) {
+            settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="enabled" ${isPluginEnabled ? 'checked' : ''} style="cursor: pointer;" onchange="const wraps = document.querySelectorAll('.ic_plugin_params_${plugin.id}'); wraps.forEach(w => { w.style.maxHeight = this.checked ? '1000px' : '0px'; w.style.opacity = this.checked ? '1' : '0'; }); sendWorkflowUpdate(this)" />`;
+        }
+        settingsHtml += `</div>`;
         
         let enabledParamHtml = '';
         let otherParamsHtml = '';
         
         plugin.params.forEach(param => {
+            if (param.name === 'enabled') return;
+            
             const val = pValues[param.name] !== undefined ? pValues[param.name] : param.default;
             
             let htmlChunk = `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--body-text-color, #ccc);">`;
-            htmlChunk += `<span>${t(param.label)}</span>`;
+            htmlChunk += `<span style="flex-shrink: 0; margin-right: 15px;">${t(param.label)}</span>`;
             
             if (param.type === 'bool') {
-                if (param.name === 'enabled') {
-                    htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="const wrap = document.getElementById('ic_plugin_params_${plugin.id}'); if(wrap) { wrap.style.maxHeight = this.checked ? '1000px' : '0px'; wrap.style.opacity = this.checked ? '1' : '0'; } sendWorkflowUpdate()" />`;
-                } else {
-                    htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="sendWorkflowUpdate()" />`;
-                }
+                htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="sendWorkflowUpdate(this)" />`;
             } else if (param.type === 'float' || param.type === 'int') {
                 htmlChunk += `<div style="display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; padding-left: 10px;">`;
-                htmlChunk += `<input type="range" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="flex: 1; min-width: 60px; max-width: 150px; cursor: pointer;" oninput="this.nextElementSibling.value=this.value" onchange="this.nextElementSibling.value=this.value; sendWorkflowUpdate()" />`;
-                htmlChunk += `<input type="number" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="width: 55px; text-align: center; font-family: monospace; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 2px; border-radius: 3px; outline: none;" oninput="this.previousElementSibling.value=this.value" onchange="sendWorkflowUpdate()" />`;
+                htmlChunk += `<input type="range" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="flex: 1; min-width: 60px; max-width: 150px; cursor: pointer;" oninput="this.nextElementSibling.value=this.value" onchange="this.nextElementSibling.value=this.value; sendWorkflowUpdate(this.nextElementSibling)" />`;
+                htmlChunk += `<input type="number" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}" style="width: 55px; text-align: center; font-family: monospace; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 2px; border-radius: 16px; font-size: 11px; outline: none; box-shadow: none !important; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.previousElementSibling.value=this.value" onchange="sendWorkflowUpdate(this)" />`;
                 htmlChunk += `</div>`;
             } else if (param.type === 'string' || param.type === 'password') {
                 const inputType = param.type === 'password' ? 'password' : 'text';
-                htmlChunk += `<input type="${inputType}" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" value="${val}" style="flex: 1; min-width: 0; background: var(--background-fill-primary, rgba(0,0,0,0.1)); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px 6px; border-radius: 4px;" onchange="sendWorkflowUpdate()" />`;
+                htmlChunk += `<input type="${inputType}" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="${param.name}" value="${val}" style="flex: 0 0 260px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 16px; font-size: 11px; outline: none; box-shadow: none !important; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" onchange="sendWorkflowUpdate(this)" />`;
             } else if (param.type === 'enum') {
-                htmlChunk += `<select class="ic-node-param ic-select" data-node-id="${plugin.id}" data-param-name="${param.name}" style="flex: 1; max-width: 140px; margin-left: 10px;" onchange="sendWorkflowUpdate()">`;
+                htmlChunk += `<select class="ic-node-param ic-select" data-node-id="${plugin.id}" data-param-name="${param.name}" style="flex: 1; max-width: 140px; margin-left: 10px; font-size: 11px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px; border-radius: 16px; outline: none; box-shadow: none !important; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" onchange="sendWorkflowUpdate(this)">`;
                 param.choices.forEach(c => {
-                    htmlChunk += `<option value="${c}" ${c === val ? 'selected' : ''}>${c}</option>`;
+                    const displayChoice = typeof t === 'function' ? t(c) : c;
+                    htmlChunk += `<option value="${c}" ${c === val ? 'selected' : ''}>${displayChoice}</option>`;
                 });
                 htmlChunk += `</select>`;
             }
@@ -187,20 +194,53 @@ function updateWorkflowUI(data, container) {
         
         settingsHtml += enabledParamHtml;
         if (otherParamsHtml) {
-            settingsHtml += `<div id="ic_plugin_params_${plugin.id}" style="transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: hidden; max-height: ${isPluginEnabled ? '1000px' : '0px'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
+            settingsHtml += `<div class="ic_plugin_params_${plugin.id}" style="transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: hidden; max-height: ${isPluginEnabled ? '1000px' : '0px'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
             settingsHtml += otherParamsHtml;
             settingsHtml += `</div>`;
         }
-        settingsHtml += `</div>`;
+        settingsHtml += `</div></div>`;
     });
     settingsHtml += `</div>`;
 
     container.innerHTML = html + settingsHtml;
+    
+    // Also update the canvas overlay if it exists
+    const overlayList = document.getElementById('ic-nodes-list-col');
+    const overlaySettings = document.getElementById('ic-nodes-settings-col');
+    if (overlayList) overlayList.innerHTML = html;
+    if (overlaySettings) overlaySettings.innerHTML = settingsHtml;
+    
+    // Re-apply search filter if there's text in the search box
+    const searchInput = document.getElementById('ic-nodes-search');
+    if (searchInput && searchInput.value) {
+        searchInput.dispatchEvent(new Event('input'));
+    }
 }
 
-window.sendWorkflowUpdate = function() {
+window.sendWorkflowUpdate = function(changedElem) {
+    if (changedElem) {
+        const nodeId = changedElem.getAttribute('data-node-id');
+        const paramName = changedElem.getAttribute('data-param-name');
+        let val = (changedElem.type === 'checkbox') ? changedElem.checked : changedElem.value;
+        document.querySelectorAll(`.ic-node-param[data-node-id="${nodeId}"][data-param-name="${paramName}"]`).forEach(el => {
+            if (el !== changedElem) {
+                if (el.type === 'checkbox') el.checked = val;
+                else el.value = val;
+                
+                // if it's a number/range pair, update the sibling too
+                if (el.type === 'number' && el.previousElementSibling && el.previousElementSibling.type === 'range') el.previousElementSibling.value = val;
+                if (el.type === 'range' && el.nextElementSibling && el.nextElementSibling.type === 'number') el.nextElementSibling.value = val;
+            }
+        });
+    }
+
     const stepParams = {};
-    document.querySelectorAll('.ic-node-param').forEach(input => {
+    // We only need to iterate over one set of inputs to build stepParams.
+    // The sidebar container is a good source of truth.
+    const container = document.getElementById('ic_workflow_html');
+    if (!container) return;
+    
+    container.querySelectorAll('.ic-node-param').forEach(input => {
         const nodeId = input.getAttribute('data-node-id');
         const paramName = input.getAttribute('data-param-name');
         if (!nodeId || !paramName) return;
@@ -232,7 +272,7 @@ window.sendWorkflowUpdate = function() {
 }
 
 function createNodeHtml(text, hue) {
-    return `<div class="ic-pipeline-node" style="--node-hue: ${hue};">
-        ${text}
+    return `<div class="ic-pipeline-node fluent-card" style="--node-hue: ${hue};">
+        <div class="fluent-content">${text}</div>
     </div>`;
 }

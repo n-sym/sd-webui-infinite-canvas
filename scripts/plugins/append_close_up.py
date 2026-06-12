@@ -1,0 +1,30 @@
+from typing import Any, Dict
+from scripts.pipeline_types import GenerationStep, GenerationCtx
+
+class AppendCloseUpStep(GenerationStep):
+    id = "append_close_up"
+    name = "Append Close-Up"
+    is_plugin = True
+    sort_index = 18
+    
+    @classmethod
+    def get_params(cls):
+        return [
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False}
+        ]
+        
+    @classmethod
+    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "enabled": bool(raw_params.get("enabled", False))
+        }
+        
+    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        is_enabled = ctx.var.get("enabled", False)
+        if is_enabled and ctx.prompt:
+            ctx.prompt = ctx.prompt.rstrip()
+            if not ctx.prompt.endswith(","):
+                ctx.prompt += ","
+            ctx.prompt += " close-up"
+            print(f"[Append Close-Up] Appended to prompt: {ctx.prompt}")
+        return ctx

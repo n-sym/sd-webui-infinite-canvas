@@ -41,128 +41,34 @@ def build_js():
 
 
 sam2_model = None
+from scripts.pipeline_types import GenerationCtx, GenerationStep
+from scripts.plugins.llm_prompt_optimize import LLMPromptOptimizeStep
+from scripts.plugins.append_close_up import AppendCloseUpStep
+from scripts.plugins.prompt_review import PromptReviewStep
+from scripts.plugins.latent_blend import LatentBlendStep
+from scripts.plugins.second_pass import SecondPassStep
+from scripts.plugins.edge_fix import EdgeFixStep
+import scripts.plugins.prompt_review as prompt_review
+import uuid
 
+pending_sessions = {}
 
-
-class ICLatentBlendScript(scripts.Script):
-    def title(self):
-        return "IC Latent Blend"
-
-    def show(self, is_img2img):
-        return scripts.AlwaysVisible
-
-    def run(self, p, *args):
-        pass
-
-    def on_mask_blend(self, p, mba, *args):
-        if not getattr(p, 'ic_latent_blend_active', False):
-            return
-
-        a = mba.init_latent
-        b = mba.current_latent
-        t = mba.nmask
-        
-        power = args[0] if len(args) > 0 else 0.0
-        if power > 0.0:
-            sigma = mba.sigma[0] if getattr(mba, 'sigma', None) is not None else 1.0
-            t = torch.pow(t, sigma ** power)
-
-        if t.ndim == 3: t = t.unsqueeze(0)
-        if a.ndim == 5 and t.ndim == 4: t = t.unsqueeze(2)
-
-        one_minus_t = 1 - t
-        image_interp = a * one_minus_t + b * t
-        
-        detail = 4.0
-        
-        current_magnitude = torch.norm(image_interp, p=2, dim=1, keepdim=True).to(float64(image_interp)).add_(0.00001)
-        a_magnitude = torch.norm(a, p=2, dim=1, keepdim=True).to(float64(a)).pow_(detail) * one_minus_t
-        b_magnitude = torch.norm(b, p=2, dim=1, keepdim=True).to(float64(b)).pow_(detail) * t
-        
-        desired_magnitude = a_magnitude.add_(b_magnitude).pow_(1 / detail)
-        scale = desired_magnitude.div_(current_magnitude).to(image_interp.dtype)
-        image_interp.mul_(scale)
-
-        mba.blended_latent = image_interp
-
-
-
-@dataclass
-class GenerationCtx:
-    # 1. Original Inputs
-    id_task: str = ""
-    payload_json: str = ""
-    prompt: str = ""
-    negative_prompt: str = ""
-    steps: int = 20
-    cfg_scale: float = 7.0
-    shift: float = 3.0
-    denoising_strength: float = 0.6
-    sampler_name: str = "Euler a"
-    scheduler: str = "Automatic"
-    gen_width: int = 1024
-    gen_height: int = 1024
-    seed: int = -1
-    inpainting_fill_idx: int = 1
-    outpaint_pad: str = "Black"
-    upscaler_name: str = "None"
-    auto_scale: bool = False
-    downscale_algo: str = "Bicubic"
-
-    # Dictionary-driven namespace for modules
-    step_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    var: Dict[str, Any] = field(default_factory=dict)  # Injected during pipeline loop
-
-    # 2. Extracted from Payload
-    source_rect: Dict = field(default_factory=dict)
-    target_rect: Dict = field(default_factory=dict)
-    mask_base64: str = ""
-
-    # 3. Canvas Prep
-    generation_res: int = 1024
-    init_image: Optional[Any] = None
-    mask: Optional[Any] = None
-    paste_mask: Optional[Any] = None
-    canvas_source_rect: Dict = field(default_factory=dict)
-    prep_info: Dict = field(default_factory=dict)
-
-    # 4. Processing Object (A1111)
-    p: Optional[Any] = None
-
-    # 5. Intermediate/Final Masks & Images
-    mask_gen_size_arr: Optional[Any] = None
-    symmetric_soft_mask_arr: Optional[Any] = None
-    result_img: Optional[Any] = None
-    blured_edge_mask_arr: Optional[Any] = None
-    actual_mask_arr: Optional[Any] = None
-    hard_edge_mask_arr: Optional[Any] = None
-
-    # 6. Outputs
-    final_payload: str = ""
-    is_error: bool = False
-    error_message: str = ""
-
-
-class GenerationStep:
-    id: str = "base_step"
-    name: str = "Base Step"
-    is_plugin: bool = False
-    sort_index: int = 500
-    
-    @classmethod
-    def get_params(cls) -> list[Dict[str, Any]]:
-        return []
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        return raw_params
-
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        return ctx
-
+def pause_generation_and_show_dynamic_dialog(ctx: GenerationCtx, title: str, html_content: str, js_code: str):
+    session_id = str(uuid.uuid4())
+    pending_sessions[session_id] = ctx
+    payload = {
+        "type": "dynamic_dialog",
+        "session_id": session_id,
+        "title": title,
+        "html": html_content,
+        "js": js_code
+    }
+    ctx.final_payload = json.dumps(payload)
+    return ctx
 
 class ParseInputStep(GenerationStep):
     id = "parse_input"
+    name = "Core: Parse Input"
     sort_index = 0
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         global sam2_model
@@ -240,125 +146,7 @@ class PrepareCanvasStep(GenerationStep):
         return ctx
 
 
-class LLMPromptOptimizeStep(GenerationStep):
-    id = "llm_prompt_optimizer"
-    name = "LLM Prompt Optimizer"
-    is_plugin = True
-    sort_index = 15
-    
-    @classmethod
-    def get_params(cls):
-        return [
-            {"name": "enabled", "type": "bool", "label": "Enable", "default": False},
-            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.deepseek.com/chat/completions"},
-            {"name": "api_key", "type": "password", "label": "API Key", "default": ""},
-            {"name": "model", "type": "string", "label": "Model Name", "default": "deepseek-v4-flash"},
-            {"name": "prefix_tags", "type": "string", "label": "Prefix Tags", "default": "safe, year 2025, newest, masterpiece, best quality, score_9, score_8"},
-            {"name": "character_tags", "type": "string", "label": "Character & Series", "default": ""},
-            {"name": "style_tags", "type": "string", "label": "Artist & Style", "default": ""}
-        ]
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "api_url": str(raw_params.get("api_url", "https://api.openai.com/v1/chat/completions")),
-            "api_key": str(raw_params.get("api_key", "")),
-            "model": str(raw_params.get("model", "gpt-3.5-turbo")),
-            "prefix_tags": str(raw_params.get("prefix_tags", "safe, year 2025, newest, masterpiece, best quality, score_9, score_8")),
-            "character_tags": str(raw_params.get("character_tags", "")),
-            "style_tags": str(raw_params.get("style_tags", ""))
-        }
-        
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        is_enabled = ctx.var.get("enabled", False)
-        if not is_enabled or not ctx.prompt:
-            return ctx
-            
-        import re
-        import requests
-        
-        # Extract and remove LoRAs
-        loras = re.findall(r'<lora:[^>]+>', ctx.prompt)
-        content_prompt = re.sub(r'<lora:[^>]+>', '', ctx.prompt).strip()
-        
-        # Optimize content
-        api_url = ctx.var.get("api_url", "")
-        api_key = ctx.var.get("api_key", "")
-        model = ctx.var.get("model", "")
-        optimized_content = content_prompt
-        
-        if api_key and content_prompt:
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            char_tags = ctx.var.get("character_tags", "")
-            style_tags = ctx.var.get("style_tags", "")
-            
-            system_prompt = f"""Enhance the user's text into a comma-separated list of highly detailed stable diffusion tags. Reply ONLY with the tags.
-CRITICAL RULES:
-1. DO NOT add any quality tags (e.g., masterpiece, best quality, highres).
-2. DO NOT add "close-up" unless the user explicitly asks for it.
-3. The following character and style tags will be automatically combined with your output. DO NOT copy or include them in your output, just use them as context for your generation:
-[Context - Characters]: {char_tags if char_tags else 'None'}
-[Context - Style]: {style_tags if style_tags else 'None'}
-"""
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content_prompt}
-                ]
-            }
-            try:
-                print(f"[LLM Optimizer] Sending to LLM: {content_prompt}")
-                response = requests.post(api_url, headers=headers, json=payload, timeout=15)
-                response.raise_for_status()
-                optimized_content = response.json()['choices'][0]['message']['content'].strip()
-                print(f"[LLM Optimizer] Received optimized: {optimized_content}")
-            except Exception as e:
-                print(f"[LLM Optimizer] Failed to optimize: {e}")
-        
-        # Reconstruct final prompt
-        parts = []
-        for p in [ctx.var.get("prefix_tags", ""), ctx.var.get("character_tags", ""), ctx.var.get("style_tags", ""), optimized_content]:
-            p = p.strip()
-            if p:
-                parts.append(p)
-                
-        final_prompt = ", ".join(parts)
-        if loras:
-            final_prompt += " " + " ".join(loras)
-            
-        ctx.prompt = final_prompt
-        return ctx
 
-
-class AppendCloseUpStep(GenerationStep):
-    id = "append_close_up"
-    name = "Append Close-Up"
-    is_plugin = True
-    sort_index = 18
-    
-    @classmethod
-    def get_params(cls):
-        return [
-            {"name": "enabled", "type": "bool", "label": "Enable", "default": False}
-        ]
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "enabled": bool(raw_params.get("enabled", False))
-        }
-        
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        is_enabled = ctx.var.get("enabled", False)
-        if is_enabled and ctx.prompt:
-            ctx.prompt = ctx.prompt.rstrip()
-            if not ctx.prompt.endswith(","):
-                ctx.prompt += ","
-            ctx.prompt += " close-up"
-            print(f"[Append Close-Up] Appended to prompt: {ctx.prompt}")
-        return ctx
 
 
 class SetupProcessingStep(GenerationStep):
@@ -441,117 +229,6 @@ class SetupProcessingStep(GenerationStep):
             
         return ctx
 
-
-class LatentBlendStep(GenerationStep):
-    id = "latent_blend"
-    name = "Latent Edge Blend"
-    is_plugin = True
-    sort_index = 30
-    
-    @classmethod
-    def get_params(cls):
-        return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
-            {"name": "power", "label": "Blend Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01}
-        ]
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "power": float(raw_params.get("power", 1.0))
-        }
-
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        if not ctx.var.get("enabled", False):
-            return ctx
-            
-        blend_power = ctx.var.get("power", 1.0)
-        ctx.latent_blend_power = blend_power  # sync for later scripts
-        
-        edge_radius = max(1, int(max(ctx.gen_width, ctx.gen_height) * 0.025))
-        ksize = int(edge_radius) * 2 + 1
-        ctx.symmetric_soft_mask_arr = cv2.GaussianBlur(ctx.mask_gen_size_arr, (ksize, ksize), 0)
-        
-        ctx.p.image_mask = Image.fromarray(ctx.symmetric_soft_mask_arr)
-        ctx.p.mask_round = False
-        ctx.p.ic_latent_blend_active = True
-        ic_script = ICLatentBlendScript()
-        ic_script.args_from = len(ctx.p.script_args)
-        ic_script.args_to = len(ctx.p.script_args)
-        if getattr(ctx.p, "scripts", None) is not None and getattr(ctx.p.scripts, "alwayson_scripts", None) is not None:
-            ctx.p.scripts.alwayson_scripts.append(ic_script)
-        elif getattr(ctx.p, "scripts", None) is None:
-            from modules.scripts import ScriptRunner
-            ctx.p.scripts = ScriptRunner()
-            ctx.p.scripts.alwayson_scripts = [ic_script]
-            
-        return ctx
-
-class SecondPassStep(GenerationStep):
-    id = "second_pass"
-    name = "Hires Fix"
-    is_plugin = True
-    sort_index = 45
-    
-    @classmethod
-    def get_params(cls):
-        from modules import shared
-        return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
-            {"name": "upscaler", "label": "Upscaler", "type": "enum", "choices": [x.name for x in shared.sd_upscalers], "default": shared.sd_upscalers[0].name if shared.sd_upscalers else "None"},
-            {"name": "scale_factor", "label": "Scale Factor", "type": "float", "default": 1.5, "min": 1.0, "max": 4.0, "step": 0.05},
-            {"name": "overlap", "label": "Tile Overlap", "type": "int", "default": 64, "min": 0, "max": 256, "step": 16},
-            {"name": "steps", "label": "Steps", "type": "int", "default": 15, "min": 1, "max": 100, "step": 1},
-            {"name": "denoising_strength", "label": "Denoising Strength", "type": "float", "default": 0.35, "min": 0.0, "max": 1.0, "step": 0.01}
-        ]
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        from modules import shared
-        return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "upscaler": str(raw_params.get("upscaler", shared.sd_upscalers[0].name if shared.sd_upscalers else "None")),
-            "scale_factor": float(raw_params.get("scale_factor", 1.5)),
-            "overlap": int(raw_params.get("overlap", 64)),
-            "steps": int(raw_params.get("steps", 15)),
-            "denoising_strength": float(raw_params.get("denoising_strength", 0.35))
-        }
-
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        if not ctx.var.get("enabled", False):
-            return ctx
-            
-        from scripts.sd_upscale import SDUpscale
-        import copy
-        
-        # Clone processing object to avoid messing up the original params
-        p = copy.copy(ctx.p)
-        
-        # Configure new parameters
-        p.init_images = [ctx.result_img]
-        p.steps = ctx.var["steps"]
-        p.denoising_strength = ctx.var["denoising_strength"]
-        # Clear out mask because SD Upscale acts on the whole image (tiles)
-        p.mask = None
-        p.image_mask = None
-        
-        # Instantiate and run the built-in SD Upscale script
-        sd_upscale = SDUpscale()
-        
-        processed = sd_upscale.run(
-            p,
-            overlap=ctx.var["overlap"],
-            upscaler_index=ctx.var["upscaler"],
-            scale_factor=ctx.var["scale_factor"],
-            override=False
-        )
-        
-        if processed and processed.images:
-            ctx.result_img = processed.images[0]
-            
-        return ctx
-
 def ic_process_images(p, ctx):
     compile_preset = getattr(ctx, "compile_preset", "Disable")
     if compile_preset != "Disable":
@@ -609,125 +286,7 @@ class FirstPassStep(GenerationStep):
         return ctx
 
 
-class EdgeFixStep(GenerationStep):
-    id = "edge_fix"
-    name = "Edge Fix Post-Process"
-    is_plugin = True
-    sort_index = 110
-    
-    @classmethod
-    def get_params(cls):
-        return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
-            {"name": "power", "label": "Fix Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.5, "step": 0.01}
-        ]
-        
-    @classmethod
-    def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "power": float(raw_params.get("power", 1.0))
-        }
 
-    def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        is_enabled = ctx.var.get("enabled", False)
-        power = ctx.var.get("power", 1.0)
-        
-        # Post-processing steps
-        if not ctx.result_img or ctx.mask_gen_size_arr is None:
-            return ctx
-            
-        lb_params = ctx.step_params.get("latent_blend", {})
-        lb_enabled = lb_params.get("enabled", False)
-
-        original_paste_mask_arr = np.array(ctx.paste_mask.convert("L"))
-        
-        if lb_enabled and not is_enabled:
-            symmetric_soft_mask_resized = cv2.resize(ctx.symmetric_soft_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_LINEAR)
-            paste_mask_arr = cv2.max(original_paste_mask_arr, symmetric_soft_mask_resized)
-            paste_mask_arr[paste_mask_arr > 0] = 255
-            ctx.paste_mask = Image.fromarray(paste_mask_arr)
-            return ctx
-            
-        if not is_enabled:
-            return ctx
-
-        ctx.edge_fix_power = power # sync
-
-        from modules import images as a1111_images
-        edge_radius = max(1, int(max(ctx.gen_width, ctx.gen_height) * 0.025))
-        
-        img_in_resized = a1111_images.resize_image(0, ctx.p.init_images[0], ctx.gen_width, ctx.gen_height)
-        img_in_arr = np.array(img_in_resized).astype(np.int32)
-        img_out_arr = np.array(ctx.result_img).astype(np.int32)
-        
-        delta = np.abs(img_out_arr - img_in_arr)
-        delta_max = np.max(delta, axis=2)
-        delta_mask = (delta_max > 5).astype(np.uint8) * 255
-        
-        kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-        delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_OPEN, kernel_open)
-        delta_mask = cv2.morphologyEx(delta_mask, cv2.MORPH_CLOSE, kernel_close)
-        
-        safe_mask = cv2.dilate(ctx.mask_gen_size_arr, np.ones((int(edge_radius)*2+1, int(edge_radius)*2+1), np.uint8))
-        actual_mask_arr = cv2.bitwise_and(delta_mask, safe_mask)
-        
-        if np.max(actual_mask_arr) == 0:
-            ctx.blured_edge_mask_arr = np.zeros((ctx.gen_height, ctx.gen_width), dtype=np.uint8)
-            ctx.hard_edge_mask_arr = np.zeros((ctx.gen_height, ctx.gen_width), dtype=np.uint8)
-        else:
-            down_factor = 4
-            small_w = max(1, ctx.gen_width // down_factor)
-            small_h = max(1, ctx.gen_height // down_factor)
-            small_actual = cv2.resize(actual_mask_arr, (small_w, small_h), interpolation=cv2.INTER_NEAREST)
-            
-            dist_in_eff = cv2.distanceTransform(small_actual, cv2.DIST_L2, 3)
-            dist_out_eff = cv2.distanceTransform(cv2.bitwise_not(small_actual), cv2.DIST_L2, 3)
-            dist_to_edge = (dist_in_eff + dist_out_eff) * down_factor
-            
-            sigma = max(1, edge_radius / 3.0)
-            edge_mask_float = np.exp(- (dist_to_edge**2) / (2 * sigma**2))
-            edge_mask_dist_arr = (edge_mask_float * 255).astype(np.uint8)
-            
-            large_edge_mask = cv2.resize(edge_mask_dist_arr, (ctx.gen_width, ctx.gen_height), interpolation=cv2.INTER_LINEAR)
-            
-            blur_k = int(edge_radius) * 2 + 1
-            if blur_k % 2 == 0: blur_k += 1
-            blured_edge_mask_arr = cv2.GaussianBlur(large_edge_mask, (blur_k, blur_k), 0)
-            blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
-            ctx.blured_edge_mask_arr = cv2.GaussianBlur(blured_edge_mask_arr, (blur_k, blur_k), 0)
-            
-            ctx.hard_edge_mask_arr = np.copy(ctx.blured_edge_mask_arr)
-            ctx.hard_edge_mask_arr[ctx.hard_edge_mask_arr > 0] = 255
-            hard_edge_mask = Image.fromarray(ctx.hard_edge_mask_arr)
-            
-            p2 = processing.StableDiffusionProcessingImg2Img(
-                sd_model=shared.sd_model, outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples, outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
-                prompt=ctx.prompt, negative_prompt=ctx.negative_prompt, seed=ctx.seed, subseed=-1, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, seed_enable_extras=False,
-                sampler_name=ctx.sampler_name, scheduler=ctx.scheduler, batch_size=1, n_iter=1, steps=max(1, int(ctx.steps * 0.2 * power)),
-                cfg_scale=ctx.cfg_scale, distilled_cfg_scale=ctx.shift, width=ctx.gen_width, height=ctx.gen_height, restore_faces=False, tiling=False,
-                init_images=[ctx.result_img], mask=hard_edge_mask, mask_blur=4, inpainting_fill=ctx.inpainting_fill_idx, resize_mode=0,
-                denoising_strength=(- (ctx.denoising_strength ** 2) / (2 * power) + ctx.denoising_strength), image_cfg_scale=None, inpaint_full_res=False, inpaint_full_res_padding=0, inpainting_mask_invert=0
-            )
-            p2.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
-            
-            processed2 = ic_process_images(p2, ctx)
-            if processed2.images:
-                inpaint_image_2 = processed2.images[0]
-                base_arr = np.array(ctx.result_img).astype(np.float32)
-                new_arr = np.array(inpaint_image_2).astype(np.float32)
-                alpha = (ctx.blured_edge_mask_arr / 255.0)[:, :, np.newaxis]
-                final_blended_arr = base_arr * (1.0 - alpha) + new_arr * alpha
-                ctx.result_img = Image.fromarray(final_blended_arr.astype(np.uint8))
-        
-        actual_mask_resized = cv2.resize(actual_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_NEAREST)
-        hard_edge_mask_resized = cv2.resize(ctx.hard_edge_mask_arr, ctx.paste_mask.size, interpolation=cv2.INTER_LINEAR)
-        paste_mask_arr = cv2.max(original_paste_mask_arr, cv2.max(actual_mask_resized, hard_edge_mask_resized))
-        paste_mask_arr[paste_mask_arr > 0] = 255
-        ctx.paste_mask = Image.fromarray(paste_mask_arr)
-        
-        return ctx
 
 
 class FinalizeStateStep(GenerationStep):
@@ -768,112 +327,6 @@ class FinalizeStateStep(GenerationStep):
         return ctx
 
 
-def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo, compile_preset="Disable"):
-    ctx = GenerationCtx(
-        id_task=id_task, payload_json=payload_json, prompt=prompt, negative_prompt=negative_prompt,
-        steps=steps, cfg_scale=cfg_scale, shift=shift, denoising_strength=denoising_strength,
-        sampler_name=sampler_name, scheduler=scheduler, gen_width=gen_width, gen_height=gen_height,
-        seed=seed, inpainting_fill_idx=inpainting_fill_idx, outpaint_pad=outpaint_pad,
-        upscaler_name=upscaler_name, auto_scale=auto_scale, downscale_algo=downscale_algo
-    )
-    ctx.compile_preset = compile_preset
-    
-    pipeline = [
-        ParseInputStep(),
-        PrepareCanvasStep(),
-        LLMPromptOptimizeStep(),
-        AppendCloseUpStep(),
-        SetupProcessingStep(),
-        LatentBlendStep(),
-        FirstPassStep(),
-        SecondPassStep(),
-        EdgeFixStep(),
-        FinalizeStateStep()
-    ]
-    
-    try:
-        total_steps = 0
-        steps_accumulated = 0
-        
-        for step in pipeline:
-            if step.id not in ctx.step_params:
-                ctx.step_params[step.id] = {}
-            ctx.var = ctx.step_params[step.id]
-            
-            # Update total steps once params are populated
-            if step.id == "setup_processing":
-                total_steps += ctx.steps
-                if ctx.step_params.get("edge_fix", {}).get("enabled", False):
-                    power = ctx.step_params.get("edge_fix", {}).get("power", 1.0)
-                    total_steps += max(1, int(ctx.steps * 0.2 * power))
-                    
-                if ctx.step_params.get("second_pass", {}).get("enabled", False):
-                    import math
-                    sp = ctx.step_params["second_pass"]
-                    scale_factor = sp.get("scale_factor", 1.5)
-                    overlap = sp.get("overlap", 64)
-                    upscale_steps = sp.get("steps", 15)
-                    
-                    upscaled_w = int(ctx.gen_width * scale_factor)
-                    upscaled_h = int(ctx.gen_height * scale_factor)
-                    
-                    # Compute tiles based on split_grid logic
-                    # WebUI's grid splits image into tiles of size gen_width/gen_height
-                    if upscaled_w > ctx.gen_width or upscaled_h > ctx.gen_height:
-                        non_overlap_w = ctx.gen_width - overlap
-                        non_overlap_h = ctx.gen_height - overlap
-                        cols = math.ceil((upscaled_w - overlap) / non_overlap_w) if non_overlap_w > 0 else 1
-                        rows = math.ceil((upscaled_h - overlap) / non_overlap_h) if non_overlap_h > 0 else 1
-                        cols = max(1, cols)
-                        rows = max(1, rows)
-                        num_tiles = cols * rows
-                    else:
-                        num_tiles = 1
-                        
-                    total_steps += num_tiles * upscale_steps
-                    
-            if step.id == "edge_fix" or step.id == "second_pass":
-                steps_accumulated += ctx.steps
-                if step.id == "edge_fix" and ctx.step_params.get("second_pass", {}).get("enabled", False):
-                    # add second pass tiles steps to accumulated
-                    sp = ctx.step_params["second_pass"]
-                    scale_factor = sp.get("scale_factor", 1.5)
-                    overlap = sp.get("overlap", 64)
-                    upscale_steps = sp.get("steps", 15)
-                    upscaled_w = int(ctx.gen_width * scale_factor)
-                    upscaled_h = int(ctx.gen_height * scale_factor)
-                    import math
-                    non_overlap_w = ctx.gen_width - overlap
-                    non_overlap_h = ctx.gen_height - overlap
-                    cols = math.ceil((upscaled_w - overlap) / non_overlap_w) if non_overlap_w > 0 else 1
-                    rows = math.ceil((upscaled_h - overlap) / non_overlap_h) if non_overlap_h > 0 else 1
-                    num_tiles = max(1, cols) * max(1, rows)
-                    steps_accumulated += (num_tiles * upscale_steps) - ctx.steps # replace ctx.steps with tile total
-            
-            # Update WebUI progress text
-            hue = getattr(step, 'sort_index', 0) % 360
-            shared.state.textinfo = f"{getattr(step, 'name', step.id)}|{hue}|{total_steps}|{steps_accumulated}"
-            
-            ctx = step(ctx)
-            if ctx.is_error or ctx.final_payload != "":
-                break
-    except Exception as e:
-        traceback.print_exc()
-        ctx.is_error = True
-        ctx.error_message = str(e)
-        
-    if ctx.is_error and ctx.error_message != "":
-        return "", gr.update(), gr.update(), f"Error: {ctx.error_message}"
-        
-    if getattr(shared.state, 'interrupted', False) or getattr(shared.state, 'skipped', False):
-        import json
-        payload = {"type": "generation_done", "tiles": []}
-        return json.dumps(payload), gr.update(), gr.update(), ""
-        
-    if ctx.final_payload:
-        return ctx.final_payload, gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo()), ""
-        
-    return "", gr.update(), gr.update(), ""
 
 
 def api_apply(feather_radius):
@@ -901,39 +354,11 @@ def api_discard():
         return "", gr.update(), gr.update()
 
 
-def api_check_session():
-    if canvas_state.is_dirty:
-        payload = canvas_state.get_tiles_payload()
-        payload["type"] = "session_check"
-        payload["has_session"] = True
-        payload["preview"] = canvas_state.get_thumbnail_base64()
-        return json.dumps(payload)
-    else:
-        return json.dumps({
-            "type": "session_check",
-            "has_session": False
-        })
-
-
-def api_restore_session():
-    payload = canvas_state.get_tiles_payload()
-    payload["type"] = "session_restore"
-    payload["thumbnail"] = canvas_state.get_thumbnail_base64(512)
-    return json.dumps(payload)
-
-
-def api_clear_session():
+def reset_canvas():
     canvas_state.clear()
     payload = canvas_state.get_tiles_payload()
     payload["type"] = "session_clear"
-    return json.dumps(payload)
-
-
-def reset_canvas():
-    from scripts.canvas_state import CanvasState
-    import scripts.canvas_state
-    scripts.canvas_state.canvas_state = CanvasState()
-    return json.dumps(scripts.canvas_state.canvas_state.get_tiles_payload()), gr.update(interactive=False), gr.update(interactive=False)
+    return json.dumps(payload), gr.update(interactive=False), gr.update(interactive=False)
 
 
 def toggle_state(state):
@@ -954,7 +379,27 @@ def handle_upload(image):
     payload = canvas_state.get_tiles_payload()
     payload["type"] = "upload"
     return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+def api_list_projects():
+    if not os.path.exists(canvas_state.projects_dir):
+        return []
+    projects = [f[:-10] for f in os.listdir(canvas_state.projects_dir) if f.endswith(".infcanvas")]
+    return sorted(projects)
 
+def api_list_projects_json():
+    import json, os
+    if not os.path.exists(canvas_state.projects_dir):
+        return json.dumps([])
+    
+    projects = []
+    for f in os.listdir(canvas_state.projects_dir):
+        if f.endswith(".infcanvas"):
+            p_name = f[:-10]
+            p_path = os.path.join(canvas_state.projects_dir, f)
+            p_time = os.path.getmtime(p_path)
+            projects.append({"name": p_name, "mtime": p_time})
+            
+    projects.sort(key=lambda x: x["mtime"], reverse=True)
+    return json.dumps(projects)
 
 def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_denoise, p_sampler, p_scheduler, p_w, p_h, p_seed, p_fill, p_outpaint_pad, p_up, p_down, p_name, p_auto_scale):
     import json, zipfile, os, base64, re
@@ -999,6 +444,9 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
             if tiles_dict:
                 for (tx, ty), tile_img in tiles_dict.items():
                     def process_tile(img=tile_img, _tx=tx, _ty=ty):
+                        img_id = id(img)
+                        if img_id in canvas_state.tile_webp_cache:
+                            return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", canvas_state.tile_webp_cache[img_id])
                         img_io = BytesIO()
                         img.save(img_io, format="WEBP", lossless=True, quality=100, method=4)
                         return (f"{base_name}_t_{_tx * 1024}_{_ty * 1024}.webp", img_io.getvalue())
@@ -1027,109 +475,131 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
 
         executor.shutdown(wait=True)
 
-    tmp_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'tmp')
-    os.makedirs(tmp_dir, exist_ok=True)
     safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name)) if p_name else "project"
     if not safe_name: safe_name = "project"
-    file_path = os.path.join(tmp_dir, f"{safe_name}.infcanvas")
+    
+    canvas_state.current_project_name = safe_name
+    
+    os.makedirs(canvas_state.projects_dir, exist_ok=True)
+    file_path = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
     with open(file_path, "wb") as f:
         f.write(zip_buffer.getvalue())
 
-    return gr.update(value=file_path, visible=True)
+    return gr.update(choices=api_list_projects(), value=safe_name)
 
-
-def api_load_project(*args):
+def _load_zip_into_canvas_state(filepath):
     import zipfile, json, base64
     from io import BytesIO
     from PIL import Image
-    file_info = args[0] if args else None
-    if file_info is None:
-        return [gr.skip()] * 25
-    try:
-        import os
-        filepath = file_info.name if hasattr(file_info, "name") else file_info
-        basename = os.path.basename(filepath)
-        loaded_name = os.path.splitext(basename)[0]
-        meta = {}
-        mask_b64 = ""
-        with zipfile.ZipFile(filepath, 'r') as zip_ref:
-            if "meta.json" in zip_ref.namelist():
-                meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
-                
-            # Version Fallback parsing
-            if meta.get("version", 1) == 1:
-                # Migrate old v1 meta to v2 format internally
-                meta["version"] = 2
-                meta["workflow"] = []
-                meta["step_params"] = {
-                    "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
-                    "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
-                }
+    import os
+    
+    meta = {}
+    mask_b64 = ""
+    with zipfile.ZipFile(filepath, 'r') as zip_ref:
+        if "meta.json" in zip_ref.namelist():
+            meta = json.loads(zip_ref.read("meta.json").decode('utf-8'))
             
-            canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
+        # Version Fallback parsing
+        if meta.get("version", 1) == 1:
+            meta["version"] = 2
+            meta["workflow"] = []
+            meta["step_params"] = {
+                "edge_fix": {"enabled": meta.get("edge_fix", False), "power": meta.get("edge_fix_power", 1.0)},
+                "latent_blend": {"enabled": meta.get("latent_blend", False), "power": meta.get("latent_blend_power", 1.0)}
+            }
+        
+        canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
 
-            def load_tiles(base_name):
-                mode = "RGBA"
-                tiles_dict = {}
-                tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
-                if tile_names:
-                    import concurrent.futures
-                    def load_single_tile(name):
-                        parts = name.replace(".webp", "").split("_")
-                        tx, ty = int(parts[-2]) // 1024, int(parts[-1]) // 1024
-                        tile_data = zip_ref.read(name)
-                        tile_img = Image.open(BytesIO(tile_data))
-                        if tile_img.mode != mode:
-                            tile_img = tile_img.convert(mode)
-                        return (tx, ty), tile_img
+        def load_tiles(base_name):
+            mode = "RGBA"
+            tiles_dict = {}
+            tile_names = [n for n in zip_ref.namelist() if n.startswith(f"{base_name}_t_") and n.endswith(".webp")]
+            if tile_names:
+                import concurrent.futures
+                def load_single_tile(name):
+                    parts = name.replace(".webp", "").split("_")
+                    tx, ty = int(parts[-2]) // 1024, int(parts[-1]) // 1024
+                    tile_data = zip_ref.read(name)
+                    tile_img = Image.open(BytesIO(tile_data))
+                    if tile_img.mode != mode:
+                        tile_img = tile_img.convert(mode)
+                    return (tx, ty), tile_img
 
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        futures = [executor.submit(load_single_tile, name) for name in tile_names]
-                        for future in concurrent.futures.as_completed(futures):
-                            tx, ty = future.result()[0]
-                            tile_img = future.result()[1]
-                            tiles_dict[(tx, ty)] = tile_img
-                    return tiles_dict
-                
-                # Fallback to single WEBP or PNG file (v1)
-                single_img = None
-                if f"{base_name}.webp" in zip_ref.namelist():
-                    single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.webp"))).convert(mode)
-                elif f"{base_name}.png" in zip_ref.namelist():
-                    single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.png"))).convert(mode)
-                
-                if single_img:
-                    # Manually slice it into 1024x1024 tiles
-                    w, h = single_img.size
-                    for ty in range(math.ceil(h/1024)):
-                        for tx in range(math.ceil(w/1024)):
-                            crop = single_img.crop((tx*1024, ty*1024, (tx+1)*1024, (ty+1)*1024))
-                            tiles_dict[(tx, ty)] = crop
-                    return tiles_dict
-                return None
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    futures = [executor.submit(load_single_tile, name) for name in tile_names]
+                    for future in concurrent.futures.as_completed(futures):
+                        tx, ty = future.result()[0]
+                        tile_img = future.result()[1]
+                        tiles_dict[(tx, ty)] = tile_img
+                return tiles_dict
+            
+            # Fallback to single WEBP or PNG file (v1)
+            single_img = None
+            if f"{base_name}.webp" in zip_ref.namelist():
+                single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.webp"))).convert(mode)
+            elif f"{base_name}.png" in zip_ref.namelist():
+                single_img = Image.open(BytesIO(zip_ref.read(f"{base_name}.png"))).convert(mode)
+            
+            if single_img:
+                import math
+                w, h = single_img.size
+                for ty in range(math.ceil(h/1024)):
+                    for tx in range(math.ceil(w/1024)):
+                        crop = single_img.crop((tx*1024, ty*1024, (tx+1)*1024, (ty+1)*1024))
+                        tiles_dict[(tx, ty)] = crop
+                return tiles_dict
+            return None
 
-            import math
-            canvas_state.tiles = load_tiles("canvas") or {}
-            canvas_state.tiles_prev = load_tiles("canvas_prev")
-            canvas_state.tiles_now = load_tiles("canvas_now")
-            canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
+        canvas_state.tiles = load_tiles("canvas") or {}
+        canvas_state.tiles_prev = load_tiles("canvas_prev")
+        canvas_state.tiles_now = load_tiles("canvas_now")
+        canvas_state.canvas_bounds = meta.get("canvas_bounds", {"x": 0, "y": 0, "w": 1024, "h": 1024})
 
-            # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
-            m_img = None
-            mask_tiles = load_tiles("mask")
-            if mask_tiles:
-                max_tx = max([tx for tx, ty in mask_tiles.keys()] + [0])
-                max_ty = max([ty for tx, ty in mask_tiles.keys()] + [0])
-                w = (max_tx + 1) * 1024
-                h = (max_ty + 1) * 1024
-                m_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                for (tx, ty), tile_img in mask_tiles.items():
-                    m_img.paste(tile_img, (tx * 1024, ty * 1024))
-                
-            if m_img:
-                m_io = BytesIO()
-                m_img.save(m_io, format="WEBP", lossless=True, quality=100, method=0)
-                mask_b64 = "data:image/webp;base64," + base64.b64encode(m_io.getvalue()).decode('utf-8')
+        # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
+        m_img = None
+        mask_tiles = load_tiles("mask")
+        if mask_tiles:
+            max_tx = max([tx for tx, ty in mask_tiles.keys()] + [0])
+            max_ty = max([ty for tx, ty in mask_tiles.keys()] + [0])
+            w = (max_tx + 1) * 1024
+            h = (max_ty + 1) * 1024
+            m_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            for (tx, ty), tile_img in mask_tiles.items():
+                m_img.paste(tile_img, (tx * 1024, ty * 1024))
+            
+        if m_img:
+            m_io = BytesIO()
+            m_img.save(m_io, format="WEBP", lossless=True, quality=100, method=0)
+            mask_b64 = "data:image/webp;base64," + base64.b64encode(m_io.getvalue()).decode('utf-8')
+
+    return meta, mask_b64
+
+def api_load_project(p_name, recover_autosave=False, *args):
+    print(f"[DEBUG] api_load_project called with p_name: '{p_name}', recover_autosave: {recover_autosave}")
+    if not p_name:
+        print("[DEBUG] p_name is empty, returning skips")
+        return [gr.skip()] * 20
+        
+    try:
+        import os, json, re
+        safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
+        
+        filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+        if recover_autosave:
+            autosave_filepath = os.path.join(canvas_state.autosaves_dir, f"{safe_name}.infcanvas")
+            if os.path.exists(autosave_filepath):
+                filepath = autosave_filepath
+                print(f"[DEBUG] Recovering autosave from: {filepath}")
+        
+        print(f"[DEBUG] Loading from filepath: {filepath}")
+        if not os.path.exists(filepath):
+            print("[DEBUG] Filepath does not exist!")
+            return [gr.skip()] * 20
+            
+        loaded_name = safe_name
+        canvas_state.current_project_name = loaded_name
+        meta, mask_b64 = _load_zip_into_canvas_state(filepath)
+        print("[DEBUG] Successfully loaded zip into canvas state")
 
         payload = canvas_state.get_tiles_payload()
         payload["type"] = "project_load"
@@ -1158,13 +628,64 @@ def api_load_project(*args):
             meta.get("upscaler_name_input", gr.skip()),
             meta.get("downscale_algo_input", gr.skip()),
             meta.get("auto_scale", gr.skip()),
-            gr.update(value=None),
             gr.update(value=loaded_name)
         ]
     except Exception as e:
+        import traceback
         print(f"Error loading project: {e}")
-        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*18 + [gr.update(value=None), gr.skip()]
+        traceback.print_exc()
+        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*19
 
+
+def api_import_project(*args):
+    import os, shutil, re
+    file_info = args[0] if args else None
+    if file_info is None:
+        return [gr.skip()] * 21
+        
+    try:
+        filepath = file_info.name if hasattr(file_info, "name") else file_info
+        basename = os.path.basename(filepath)
+        safe_name = re.sub(r'[^\w\-_\. ]', '_', os.path.splitext(basename)[0])
+        
+        new_filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+        shutil.copy2(filepath, new_filepath)
+        
+        return api_load_project(safe_name) + [gr.update(value=None)]
+    except Exception as e:
+        import json
+        print(f"Error importing project: {e}")
+        return [json.dumps({"type": "error", "message": f"Failed to import project: {e}"})] + [gr.skip()]*19 + [gr.update(value=None)]
+
+
+def api_set_autosave(enabled):
+    canvas_state.autosave_enabled = bool(enabled)
+    return None
+
+def api_check_autosave():
+    status = getattr(canvas_state, "autosave_status", "idle")
+    if status == "done":
+        canvas_state.autosave_status = "idle"
+    return status
+
+def api_check_project_autosave(p_name):
+    import os, json, re
+    if not p_name: return json.dumps({"has_newer": False})
+    
+    safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
+    proj_path = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+    autosave_path = os.path.join(canvas_state.autosaves_dir, f"{safe_name}.infcanvas")
+    
+    if os.path.exists(autosave_path):
+        autosave_mtime = os.path.getmtime(autosave_path)
+        if os.path.exists(proj_path):
+            proj_mtime = os.path.getmtime(proj_path)
+            if autosave_mtime > proj_mtime:
+                return json.dumps({"has_newer": True})
+        else:
+            return json.dumps({"has_newer": True})
+            
+    return json.dumps({"has_newer": False})
 
 def api_sam_predict(payload_json):
     if not payload_json: return ""
@@ -1245,55 +766,3 @@ def api_sam_predict(payload_json):
     return ""
 
 
-
-def api_get_workflow():
-    import json
-    
-    pipeline_template = [
-        PrepareCanvasStep,
-        LLMPromptOptimizeStep,
-        AppendCloseUpStep,
-        SetupProcessingStep,
-        LatentBlendStep,
-        FirstPassStep,
-        SecondPassStep,
-        EdgeFixStep,
-        FinalizeStateStep
-    ]
-    
-    registry = []
-    for cls in pipeline_template:
-        registry.append({
-            "id": cls.id,
-            "name": getattr(cls, 'name', cls.__name__),
-            "is_plugin": getattr(cls, 'is_plugin', False),
-            "sort_index": getattr(cls, 'sort_index', 500),
-            "params": cls.get_params()
-        })
-        
-    return json.dumps({
-        "type": "workflow_query",
-        "workflow": canvas_state.workflow,
-        "step_params": canvas_state.step_params,
-        "registry": registry
-    })
-
-def api_update_workflow(payload_json):
-    import json
-    if payload_json:
-        try:
-            data = json.loads(payload_json)
-            payload_step_params = data.get("step_params", {})
-            plugins = [cls for cls in GenerationStep.__subclasses__() if getattr(cls, 'is_plugin', False)]
-            
-            for plugin_cls in plugins:
-                if plugin_cls.id in payload_step_params:
-                    resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
-                    if plugin_cls.id not in canvas_state.step_params:
-                        canvas_state.step_params[plugin_cls.id] = {}
-                    canvas_state.step_params[plugin_cls.id].update(resolved)
-                    
-        except Exception as e:
-            print(f"[Infinite Canvas] Error updating workflow: {e}")
-            
-    return api_get_workflow()

@@ -43,16 +43,24 @@ from modules import scripts
 from modules.torch_utils import float64
 import torch
 import scripts.core_logic
+import scripts.node_manager
 
 # Global reference for the SAM model to allow lazy loading and memory freeing
 
 def make_dynamic(func_name):
     def wrapper(*args, **kwargs):
         import sys
-        mod = sys.modules.get('scripts.core_logic')
-        if mod and hasattr(mod, func_name):
-            func = getattr(mod, func_name)
-            return func(*args, **kwargs)
+        mod_nm = sys.modules.get('scripts.node_manager')
+        if mod_nm and hasattr(mod_nm, func_name):
+            return getattr(mod_nm, func_name)(*args, **kwargs)
+        
+        mod_cl = sys.modules.get('scripts.core_logic')
+        if mod_cl and hasattr(mod_cl, func_name):
+            return getattr(mod_cl, func_name)(*args, **kwargs)
+            
+        # fallback
+        if hasattr(scripts.node_manager, func_name):
+            return getattr(scripts.node_manager, func_name)(*args, **kwargs)
         return globals().get(func_name, getattr(scripts.core_logic, func_name, None))(*args, **kwargs)
     return wrapper
 
@@ -61,7 +69,7 @@ def on_ui_tabs():
         with gr.Row():
             with gr.Column(scale=3):
                 # We will mount our custom canvas here using JS.
-                gr.HTML(value='<div id="ic-container" style="width:100%; height:80vh; min-height:600px; max-height:1200px; border:1px solid #ccc; position:relative; overflow:hidden; background:#333; cursor:crosshair;"><canvas id="ic-canvas"></canvas></div>')
+                gr.HTML(value='<div id="ic-container" style="width:100%; height:80vh; min-height:600px; max-height:1200px; border:1px solid #ccc; position:relative; overflow:hidden; cursor:crosshair;"><canvas id="ic-canvas"></canvas></div>')
                 
                 with gr.Row(elem_id="ic_toolbar_1", equal_height=False, visible=False):
                     prev_btn = gr.Button("Canvas ⏪", elem_id="ic_prev_btn", interactive=False, size="sm", scale=0)
@@ -150,8 +158,8 @@ def on_ui_tabs():
                     reset_btn_ui = gr.Button("Reset Canvas", elem_id="ic_reset_btn", size="sm", scale=0)
                     download_btn = gr.Button("Download Canvas", elem_id="ic_download_btn", size="sm", scale=0)
                     copy_btn = gr.Button("Copy Canvas", elem_id="ic_copy_btn", size="sm", scale=0)
-                    ic_guide_btn = gr.Button("📖 Guide", elem_id="ic_guide_btn", size="sm", scale=0)
-                    reset_btn = gr.Button("Reset Canvas Hidden", elem_id="ic_reset_btn_hidden", visible=False)
+                    ic_guide_btn = gr.Button("Guide", elem_id="ic_guide_btn", size="sm", scale=0)
+                    reset_btn = gr.Button("Reset Canvas Hidden", elem_id="ic_reset_btn_hidden", visible=True)
                     gr.HTML("", scale=1)
                 
             with gr.Column(scale=1):
@@ -162,33 +170,30 @@ def on_ui_tabs():
                 with gr.Accordion("Upload Base Image", open=False, elem_id="ic_accordion_upload"):
                     upload_image = gr.Image(type="pil", label="Upload Base Image", elem_id="ic_upload_image")
                 
-                with gr.Accordion("Project Management", open=False, elem_id="ic_accordion_project"):
-                    ic_project_name = gr.Textbox(label="Project Name", value="project", elem_id="ic_project_name")
-                    with gr.Row():
-                        ic_save_project_btn = gr.Button("Save Project", elem_id="ic_save_project_btn", variant="primary")
-                        ic_load_project_btn = gr.Button("Load Project", elem_id="ic_load_project_btn", variant="primary")
-                    
-                    ic_download_file = gr.File(label="Download Project Archive", interactive=False, visible=False, elem_id="ic_download_file")
-                    ic_upload_file = gr.File(label="Upload Project Archive", file_types=[".infcanvas", ".zip"], visible=False, elem_id="ic_upload_file")
 
                 from modules import shared
                 preset = shared.opts.data.get("forge_preset", "sd")
                 default_step = shared.opts.data.get(f"{preset}_i2i_step", 20)
-                default_cfg = shared.opts.data.get(f"{preset}_i2i_cfg", 6.0)
-                default_shift = shared.opts.data.get(f"{preset}_i2i_dcfg", 3.0)
-                default_sampler = shared.opts.data.get(f"{preset}_i2i_sampler", "Euler a")
-                default_scheduler = shared.opts.data.get(f"{preset}_i2i_scheduler", "Automatic")
+                default_cfg = shared.opts.data.get(f"{preset}_i2i_cfg", 4.0)
+                default_shift = shared.opts.data.get(f"{preset}_i2i_dcfg", 1.0)
+                default_sampler = shared.opts.data.get(f"{preset}_i2i_sampler", "Euler")
+                default_scheduler = shared.opts.data.get(f"{preset}_i2i_scheduler", "Beta")
                 
                 with gr.Accordion("Generation Parameters", open=False, elem_id="ic_accordion_gen"):
                     steps = gr.Slider(minimum=1, maximum=150, step=1, label="Sampling Steps", value=default_step, elem_id="ic_steps")
+                    steps.do_not_save_to_config = True
                     with gr.Row():
                         cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label="CFG Scale", value=default_cfg, elem_id="ic_cfg")
+                        cfg_scale.do_not_save_to_config = True
                         shift = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Shift", value=default_shift, elem_id="ic_shift")
+                        shift.do_not_save_to_config = True
                     denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising Strength", value=0.6, elem_id="ic_denoising")
                     
                     with gr.Row():
                         sampler_name = gr.Dropdown(choices=[x.name for x in sd_samplers.all_samplers], value=default_sampler, label="Sampling Method", elem_id="ic_sampler")
+                        sampler_name.do_not_save_to_config = True
                         scheduler = gr.Dropdown(choices=["Automatic"] + [x.label for x in sd_schedulers.schedulers], value=default_scheduler, label="Schedule Type", elem_id="ic_scheduler")
+                        scheduler.do_not_save_to_config = True
                     with gr.Row():
                         seed = gr.Number(label="Seed", value=-1, elem_id="ic_seed")
                         ic_compile_preset = gr.Dropdown(
@@ -211,7 +216,7 @@ def on_ui_tabs():
                     upscaler_name_input = gr.Dropdown(label="Upscaler (for resizing source)", choices=[x.name for x in shared.sd_upscalers], value="None")
                     downscale_algo_input = gr.Dropdown(label="Downscale Algorithm", choices=["Bicubic", "Lanczos", "Bilinear", "Nearest"], value="Bicubic")
 
-                with gr.Accordion("Pipeline Nodes", open=True, elem_id="ic_accordion_workflow"):
+                with gr.Accordion("Pipeline Nodes", open=False, elem_id="ic_accordion_workflow"):
                     workflow_html = gr.HTML(elem_id="ic_workflow_html", value="<div style='padding:10px; color:#888;'>Loading pipeline...</div>")
 
                 with gr.Accordion("Developer", open=False, elem_id="ic_accordion_dev"):
@@ -226,19 +231,32 @@ def on_ui_tabs():
                     payload_output = gr.Textbox(elem_id="ic_output")
                     trigger_btn = gr.Button("Trigger", elem_id="ic_trigger")
                     
+                    ic_project_name_input = gr.Textbox(elem_id="ic_project_name_input")
+                    ic_projects_json_output = gr.Textbox(elem_id="ic_projects_json_output")
+                    ic_get_projects_btn = gr.Button("Get Projects", elem_id="ic_get_projects_btn")
+                    
+                    ic_recover_autosave_input = gr.Checkbox(elem_id="ic_recover_autosave_input", value=False)
+                    ic_check_autosave_hidden_btn = gr.Button("Check Autosave Hidden", elem_id="ic_check_autosave_hidden_btn")
+                    ic_check_autosave_output = gr.Textbox(elem_id="ic_check_autosave_output")
+                    
+                    ic_load_project_hidden_btn = gr.Button("Load Hidden", elem_id="ic_load_project_hidden_btn")
+                    ic_import_file = gr.File(label="Import Project", file_types=[".infcanvas", ".zip"], elem_id="ic_import_file")
+                    ic_autosave_enable = gr.Checkbox(label="Enable Autosave", value=True, elem_id="ic_autosave_enable")
+                    ic_check_autosave_btn = gr.Button("Check Autosave", elem_id="ic_check_autosave_btn")
+                    ic_autosave_status_box = gr.Textbox(elem_id="ic_autosave_status_box")
+                    
                     apply_feather_input = gr.Number(value=0, elem_id="ic_apply_feather_input")
                     apply_btn = gr.Button("Apply", elem_id="ic_apply_hidden")
                     discard_btn = gr.Button("Discard", elem_id="ic_discard_hidden")
-                    
-                    check_session_btn = gr.Button("Check Session", elem_id="ic_check_session_btn")
-                    restore_session_btn = gr.Button("Restore Session", elem_id="ic_restore_session_btn")
-                    clear_session_btn = gr.Button("Clear Session", elem_id="ic_clear_session_btn")
                     
                     sam_payload_input = gr.Textbox(elem_id="ic_sam_payload_input")
                     sam_predict_btn = gr.Button("SAM Predict", elem_id="ic_sam_predict_btn")
                     query_workflow_btn = gr.Button("Query Workflow", elem_id="ic_query_workflow_btn")
                     update_workflow_payload = gr.Textbox(elem_id="ic_update_workflow_payload")
                     update_workflow_btn = gr.Button("Update Workflow", elem_id="ic_update_workflow_btn")
+                    
+                    resume_payload = gr.Textbox(elem_id="ic_resume_payload")
+                    resume_trigger = gr.Button("Resume Generate", elem_id="ic_resume_trigger")
                 
                 html_info = gr.HTML(elem_id="ic_html_info")
                 
@@ -246,6 +264,14 @@ def on_ui_tabs():
                     fn=make_dynamic('api_apply'),
                     inputs=[apply_feather_input],
                     outputs=[payload_output, prev_btn, now_btn]
+                )
+                
+                resume_trigger.click(
+                    fn=wrap_gradio_gpu_call(make_dynamic('api_cont'), extra_outputs=[gr.update(), gr.update(), ""]),
+                    _js="function(){ var args = Array.from(arguments); args[0] = window.ic_current_task_id || 'ic_task'; return args; }",
+                    inputs=[dummy_component, resume_payload],
+                    outputs=[payload_output, prev_btn, now_btn, html_info],
+                    show_progress=False
                 )
                 
                 discard_btn.click(
@@ -269,7 +295,7 @@ def on_ui_tabs():
                     
                 reset_btn_ui.click(
                     fn=None,
-                    _js="function(){ if(confirm(t('Are you sure you want to completely reset the canvas? This cannot be undone.'))) document.getElementById('ic_reset_btn_hidden').click(); return []; }",
+                    _js="function(){ if(confirm(t('Are you sure you want to completely reset the canvas? This cannot be undone.'))) { let b = document.getElementById('ic_reset_btn_hidden'); if(b && b.tagName !== 'BUTTON') b = b.querySelector('button') || b; b.click(); } return []; }",
                     inputs=[],
                     outputs=[]
                 )
@@ -293,39 +319,18 @@ def on_ui_tabs():
                     outputs=[payload_output, prev_btn, now_btn]
                 )
                 
-                    
                 upload_image.change(
                     fn=make_dynamic('handle_upload'),
                     inputs=[upload_image],
                     outputs=[payload_output, prev_btn, now_btn]
                 )
                 
-                check_session_btn.click(
-                    fn=make_dynamic('api_check_session'),
-                    inputs=[],
-                    outputs=[payload_output]
-                )
-                
-                restore_session_btn.click(
-                    fn=make_dynamic('api_restore_session'),
-                    inputs=[],
-                    outputs=[payload_output]
-                ).success(
-                    fn=make_dynamic('api_get_workflow'),
-                    inputs=[],
-                    outputs=[payload_output]
-                )
-                
-                clear_session_btn.click(
-                    fn=make_dynamic('api_clear_session'),
-                    inputs=[],
-                    outputs=[payload_output]
-                )
-                
+
                 def api_hot_reload():
                     import importlib
                     import sys
                     import scripts.core_logic
+                    import scripts.node_manager
                     print("\n[Infinite Canvas] Hot Reloading Extension Logic...")
                     if 'scripts.canvas_state' in sys.modules:
                         importlib.reload(sys.modules['scripts.canvas_state'])
@@ -333,6 +338,9 @@ def on_ui_tabs():
                     if 'scripts.core_logic' in sys.modules:
                         importlib.reload(sys.modules['scripts.core_logic'])
                         print("[Infinite Canvas] -> Reloaded scripts.core_logic")
+                    if 'scripts.node_manager' in sys.modules:
+                        importlib.reload(sys.modules['scripts.node_manager'])
+                        print("[Infinite Canvas] -> Reloaded scripts.node_manager")
                     if 'scripts.infinite_canvas' in sys.modules:
                         importlib.reload(sys.modules['scripts.infinite_canvas'])
                         print("[Infinite Canvas] -> Reloaded scripts.infinite_canvas")
@@ -353,23 +361,76 @@ def on_ui_tabs():
                 
 
 
+                ic_get_projects_btn.click(
+                    fn=make_dynamic('api_list_projects_json'),
+                    inputs=[],
+                    outputs=[ic_projects_json_output]
+                )
+                
                 # Hidden button to trigger python save
                 ic_save_project_hidden_btn = gr.Button("Save Project Hidden", elem_id="ic_save_project_hidden_btn", visible=False)
                 
                 ic_save_project_hidden_btn.click(
                     fn=make_dynamic('api_save_project'),
-                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name, ic_auto_scale],
-                    outputs=[ic_download_file]
+                    inputs=[payload_input, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_project_name_input, ic_auto_scale],
+                    outputs=[dummy_component]
+                ).success(
+                    fn=make_dynamic('api_list_projects_json'),
+                    inputs=[],
+                    outputs=[ic_projects_json_output]
+                ).success(
+                    fn=None,
+                    js="() => { if(window.icShowCustomToast) { window.icShowCustomToast('Project saved successfully!', 3000, 'white', 'ic-save-toast'); let t = document.getElementById('ic-save-toast'); if(t){ t.querySelector('.ic-toast-bar').parentNode.style.display = 'none'; t.children[0].style.marginBottom = '0'; } } }",
+                    inputs=[],
+                    outputs=[]
                 )
                 
-                ic_upload_file.change(
+                ic_load_project_hidden_btn.click(
+                    fn=lambda: gr.update(value=''), # Clear #ic_output to ensure new payload is detected
+                    inputs=None,
+                    outputs=[payload_output],
+                    js="() => { if(window.icShowCustomToast) window.icShowCustomToast('Loading project...', 0, 'white', 'ic-load-toast'); return []; }"
+                ).then(
                     fn=make_dynamic('api_load_project'),
-                    inputs=[ic_upload_file],
-                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, ic_upload_file, ic_project_name]
+                    inputs=[ic_project_name_input, ic_recover_autosave_input],
+                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, dummy_component]
                 ).success(
                     fn=make_dynamic('api_get_workflow'),
                     inputs=[],
                     outputs=[payload_output]
+                )
+                
+                ic_check_autosave_hidden_btn.click(
+                    fn=make_dynamic('api_check_project_autosave'),
+                    inputs=[ic_project_name_input],
+                    outputs=[ic_check_autosave_output]
+                )
+                
+                ic_import_file.change(
+                    fn=lambda: gr.update(value=''),
+                    inputs=None,
+                    outputs=[payload_output],
+                    js="() => { if(window.icShowCustomToast) window.icShowCustomToast('Loading project...', 0, 'white', 'ic-load-toast'); return []; }"
+                ).then(
+                    fn=make_dynamic('api_import_project'),
+                    inputs=[ic_import_file],
+                    outputs=[payload_output, prev_btn, now_btn, toprow.prompt, toprow.negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill, ic_outpaint_pad, upscaler_name_input, downscale_algo_input, ic_auto_scale, dummy_component, ic_import_file]
+                ).success(
+                    fn=make_dynamic('api_get_workflow'),
+                    inputs=[],
+                    outputs=[payload_output]
+                )
+                
+                ic_autosave_enable.change(
+                    fn=make_dynamic('api_set_autosave'),
+                    inputs=[ic_autosave_enable],
+                    outputs=None
+                )
+                
+                ic_check_autosave_btn.click(
+                    fn=make_dynamic('api_check_autosave'),
+                    inputs=None,
+                    outputs=[ic_autosave_status_box]
                 )
                 
                     

@@ -1,4 +1,19 @@
-const canvas = document.getElementById('ic-canvas');
+const IC_ICONS = {
+    undo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M320-200q-17 0-28.5-11.5T280-240q0-17 11.5-28.5T320-280h244q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l76 76q11 11 11 28t-11 28q-11 11-28 11t-28-11L188-572q-6-6-8.5-13t-2.5-15q0-8 2.5-15t8.5-13l144-144q11-11 28-11t28 11q11 11 11 28t-11 28l-76 76h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H320Z"/></svg>`,
+    redo: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M648-560H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h244q17 0 28.5 11.5T680-240q0 17-11.5 28.5T640-200H396q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252l-76-76q-11-11-11-28t11-28q11-11 28-11t28 11l144 144q6 6 8.5 13t2.5 15q0 8-2.5 15t-8.5 13L628-428q-11 11-28 11t-28-11q-11-11-11-28t11-28l76-76Z"/></svg>`,
+    rectangle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-480H160v480Zm0 0v-480 480Z"/></svg>`,
+    brush: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M240-120q-45 0-89-22t-71-58q26 0 53-20.5t27-59.5q0-50 35-85t85-35q50 0 85 35t35 85q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T320-280q0-17-11.5-28.5T280-320q-17 0-28.5 11.5T240-280q0 23-5.5 42T220-202q5 2 10 2h10Zm230-160L360-470l358-358q11-11 27.5-11.5T774-828l54 54q12 12 12 28t-12 28L470-360Zm-190 80Z"/></svg>`,
+    circle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>`,
+    ink_eraser: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M690-240h150q17 0 28.5 11.5T880-200q0 17-11.5 28.5T840-160H610l80-80Zm-483 80q-8 0-15.5-3t-13.5-9l-73-73q-23-23-23.5-57t22.5-58l440-456q23-24 56.5-24t56.5 23l199 199q23 23 23 57t-23 57L532-172q-6 6-13.5 9t-15.5 3H207Zm279-80 314-322-198-198-442 456 64 64h262Zm-6-240Z"/></svg>`,
+    auto_fix_high: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="m20 7-.95-2.05L17 4l2.05-.95L20 1l.95 2.05L23 4l-2.05.95ZM8.5 7l-.95-2.05L5.5 4l2.05-.95L8.5 1l.95 2.05L11.5 4l-2.05.95ZM20 18.5l-.95-2.05L17 15.5l2.05-.95.95-2.05.95 2.05 2.05.95-2.05.95ZM5.1 21.7l-2.8-2.8q-.3-.3-.3-.725t.3-.725L13.45 6.3q.3-.3.725-.3t.725.3l2.8 2.8q.3.3.3.725t-.3.725L6.55 21.7q-.3.3-.725.3t-.725-.3Zm.75-2.1L13 12.4 11.6 11l-7.2 7.15Z"/></svg>`,
+    search: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>`,
+    crop: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M240-240v-480h-80v-80h80v-80h80v80h480v80H320v400h80v80h-80v80h-80v-80H240Zm400-160v-320H400v-80h320v400h-80Z"/></svg>`,
+    projects: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>`,
+    save: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM480-240q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/></svg>`,
+    import: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M260-160q-42 0-71-29t-29-71v-440q0-42 29-71t71-29h440q42 0 71 29t29 71v440q0 42-29 71t-71 29H260Zm0-80h440v-440H260v440Zm220-60 160-160-56-56-64 64v-168h-80v168l-64-64-56 56 160 160Zm-220 60v-440 440Z"/></svg>`
+};
+
+    const canvas = document.getElementById('ic-canvas');
     const container = document.getElementById('ic-container');
     
     const guideModalHTML = `
@@ -84,22 +99,262 @@ const canvas = document.getElementById('ic-canvas');
     </div>`;
     container.insertAdjacentHTML('beforeend', modalHTML);
     
-    const sessionModalHTML = `
-    <div id="ic-session-modal" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2000; flex-direction:column; font-family:sans-serif; align-items:center; justify-content:center;">
-        <div style="background:#222; padding:30px; border-radius:12px; display:flex; flex-direction:column; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-            <h2 style="color:white; margin-top:0;">${t('Continue Previous Session?')}</h2>
-            <img id="ic-session-preview" src="" style="max-width:512px; max-height:512px; border:2px solid #555; border-radius:8px; margin-bottom:25px; background:repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 20px 20px;">
-            <div style="display:flex; gap:20px; width:100%;">
-                <button id="ic-session-no" style="flex:1; padding:12px 20px; background:#444; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:16px; transition:background 0.2s;">${t('Start Fresh')}</button>
-                <button id="ic-session-yes" style="flex:1; padding:12px 20px; background:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:16px; transition:background 0.2s;">${t('Restore Canvas')}</button>
+
+    const projectsModalHTML = `
+    <div id="ic-projects-modal" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 3000; justify-content: center; align-items: center; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+        <div class="fluent-panel" style="background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); color: var(--body-text-color, #e0e0e0); padding: 32px; border-radius: 24px; width: 90%; max-width: 480px; max-height: 90%; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 1px 1px 0 rgba(255, 255, 255, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <span>${IC_ICONS.projects}</span>
+                    <span>${t('Project Management')}</span>
+                </h2>
+                <button id="ic-projects-close" style="background: transparent; border: none; font-size: 24px; color: color-mix(in srgb, var(--body-text-color, #fff) 50%, transparent); cursor: pointer; line-height: 1; padding: 0;">&times;</button>
+            </div>
+            
+            <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                <input type="text" id="ic-projects-name-input" value="project" placeholder="${t('Project Name')}" style="flex: 1; box-sizing: border-box; height: 44px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); border: none; border-radius: 12px; color: var(--body-text-color, #fff); padding: 0 16px; outline: none; font-size: 15px; font-weight: 500; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
+                <button id="ic-projects-save-btn" class="fluent-card" style="box-sizing: border-box; height: 44px; padding: 0 20px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 85%, cornflowerblue); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--body-text-color, #fff); margin: 0; border: none;">
+                    <span style="font-size: 18px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.save}</span> ${t('Save')}
+                </button>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-weight: 700;">${t('Existing Projects')}</div>
+                <button id="ic-projects-import-btn" class="fluent-card" style="padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--body-text-color, #fff);">
+                    <span style="font-size: 16px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.import}</span> ${t('Import ZIP')}
+                </button>
+            </div>
+            
+            <div id="ic-projects-list" style="flex: 1 1 auto; min-height: 0; overflow-y: auto; display: block; padding-right: 8px; padding-bottom: 8px;">
+                <div style="padding: 30px 20px; text-align: center; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-size: 14px;">
+                    ${t('Loading projects...')}
+                </div>
             </div>
         </div>
     </div>`;
-    container.insertAdjacentHTML('beforeend', sessionModalHTML);
+    container.insertAdjacentHTML('beforeend', projectsModalHTML);
+    
+    const recoverModalHTML = `
+    <div id="ic-recover-modal" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 3100; justify-content: center; align-items: center; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+        <div class="fluent-panel" style="background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); color: var(--body-text-color, #e0e0e0); padding: 32px; border-radius: 24px; width: 90%; max-width: 400px; display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 1px 1px 0 rgba(255, 255, 255, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                    <span>${typeof t === 'function' ? t('Autosave Detected') : 'Autosave Detected'}</span>
+                </h2>
+            </div>
+            
+            <div style="font-size: 14px; line-height: 1.5; color: color-mix(in srgb, var(--body-text-color, #fff) 80%, transparent); margin-bottom: 30px;">
+                ${typeof t === 'function' ? t('A newer autosave exists for this project. Do you want to recover it?') : 'A newer autosave exists for this project. Do you want to recover it?'}
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button id="ic-recover-btn-no" class="fluent-card" style="box-sizing: border-box; height: 36px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.1); color: var(--body-text-color, #fff); border: none;">
+                    ${typeof t === 'function' ? t('No, load original') : 'No, load original'}
+                </button>
+                <button id="ic-recover-btn-yes" class="fluent-card" style="box-sizing: border-box; height: 36px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 85%, cornflowerblue); color: var(--body-text-color, #fff); border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    ${typeof t === 'function' ? t('Yes, recover') : 'Yes, recover'}
+                </button>
+            </div>
+        </div>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', recoverModalHTML);
+    
+    document.getElementById('ic-projects-close').addEventListener('click', () => {
+        document.getElementById('ic-projects-modal').style.display = 'none';
+    });
+
+    const nodesOverlayHTML = `
+    <style>
+        #ic-nodes-panel ::-webkit-scrollbar {
+            display: none;
+        }
+        /* Firefox scrollbar support */
+        #ic-nodes-panel {
+            scrollbar-width: none;
+        }
+
+        /* Fluent Design Effects */
+        .fluent-card, .res-preset-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .fluent-card::before, .res-preset-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: radial-gradient(300px circle at var(--mouse-x, -9999px) var(--mouse-y, -9999px), rgba(255,255,255,0.3), transparent 40%);
+            background-color: transparent;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s, background-color 0.3s;
+        }
+        .fluent-card:hover::before, .res-preset-btn:hover::before {
+            opacity: 1;
+            background-color: rgba(0,0,0,0.015); /* Reduced darken by 0.33x */
+        }
+        .fluent-card > *, .res-preset-btn > *, .fluent-panel > * {
+            position: relative;
+            z-index: 1;
+        }
+        /* Fluent Panel (No Darken) */
+        .fluent-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: radial-gradient(400px circle at var(--mouse-x, -9999px) var(--mouse-y, -9999px), rgba(255,255,255,0.2), transparent 40%);
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .fluent-panel:hover::before {
+            opacity: 1;
+        }
+        .fluent-card, .res-preset-btn {
+            border: none !important;
+        }
+        .fluent-card::after, .res-preset-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 1px solid transparent;
+            border-radius: inherit;
+            background: radial-gradient(100px circle at var(--mouse-x, -9999px) var(--mouse-y, -9999px), var(--ic-glow-color, rgba(255,255,255,0.6)), transparent 100%), var(--ic-border-color, var(--border-color-primary, color-mix(in srgb, currentColor 15%, transparent)));
+            background-origin: border-box;
+            background-clip: border-box;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .ic-ripple {
+            position: absolute;
+            border-radius: 50%;
+            transform: scale(1);
+            animation: fluent-ripple 0.5s ease-out forwards;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+            pointer-events: none;
+            width: 120px;
+            height: 120px;
+            margin-top: -60px;
+            margin-left: -60px;
+            z-index: 10;
+        }
+        @keyframes fluent-ripple {
+            0% {
+                transform: scale(0.6);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.2);
+                opacity: 0;
+            }
+        }
+    </style>
+    <div id="ic-nodes-overlay" style="position:absolute; top:0; left:0; bottom:0; z-index:1500; display:flex; align-items:center; pointer-events:none; font-family:sans-serif;">
+        <div id="ic-nodes-wrapper" style="display:flex; flex-direction:row; align-items:center; height:85%; max-height:800px; transform:translateX(-750px); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);">
+            <div id="ic-nodes-panel" class="fluent-panel" style="pointer-events:auto; cursor:default; display:flex; flex-direction:row; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.4); border-left:none; border-top-right-radius:24px; border-bottom-right-radius:24px; box-shadow: 0 4px 12px rgba(0,0,0,0), inset 1px 1px 0 rgba(255,255,255,0.2); width:750px; height:100%; overflow:hidden; z-index:1; position:relative; transition:box-shadow 0.3s ease;">
+                <!-- Nodes List Column -->
+                <div style="width:260px; padding:20px; display:flex; flex-direction:column;">
+                    <div style="font-weight:bold; color:var(--body-text-color, white); margin-top:12px; margin-bottom:25px; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.8; padding-left:2px;">Pipeline</div>
+                    <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
+                </div>
+                <!-- Settings Column -->
+                <div style="flex:1; padding:20px; display:flex; flex-direction:column; position:relative;">
+                    <div id="ic-nodes-search-wrap" class="fluent-card" style="position:absolute; top:20px; left:20px; right:28px; height:42px; box-sizing:border-box; z-index:10; border-radius:24px; background:rgba(255,255,255,0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--border-color-primary, rgba(128,128,128,0.2)); transition: border-color 0.2s, background 0.2s;">
+                        <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.4; color:var(--body-text-color, white); pointer-events:none; font-size: 18px; display: inline-flex;">${IC_ICONS.search}</span>
+                        <input type="text" id="ic-nodes-search" placeholder="${t('Search settings...')}" style="width:100%; height:100%; box-sizing:border-box; padding:0 16px 0 40px; margin:0; background:transparent; border:none !important; box-shadow:none !important; color:var(--body-text-color, white); font-size:13px; outline:none; line-height:40px;" onfocus="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--color-accent, cornflowerblue)';" onblur="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" />
+                    </div>
+                    <div id="ic-nodes-settings-col" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                </div>
+            </div>
+            <!-- Toggle Button -->
+            <div style="pointer-events:auto; display:flex; align-items:center; margin-left: -1px; z-index:2;">
+                <div id="ic-nodes-toggle" style="width:24px; height:60px; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:var(--body-text-color, white); border: 1px solid var(--border-color-primary, rgba(255,255,255,0.1)); border-left: none; display:flex; align-items:center; justify-content:center; cursor:pointer; border-top-right-radius:8px; border-bottom-right-radius:8px; user-select:none; transition:background 0.2s;">
+                    <svg id="ic-nodes-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); transform: rotate(180deg);"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', nodesOverlayHTML);
+
+    document.getElementById('ic-nodes-toggle').addEventListener('click', function() {
+        const wrapper = document.getElementById('ic-nodes-wrapper');
+        const panel = document.getElementById('ic-nodes-panel');
+        const icon = document.getElementById('ic-nodes-toggle-icon');
+        if (wrapper.style.transform === 'translateX(-750px)') {
+            wrapper.style.transform = 'translateX(0)';
+            panel.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15), inset 1px 1px 0 rgba(255,255,255,0.2)';
+            if (icon) icon.style.transform = 'rotate(0deg)';
+
+        } else {
+            wrapper.style.transform = 'translateX(-750px)';
+            panel.style.boxShadow = '0 4px 12px rgba(0,0,0,0), inset 1px 1px 0 rgba(255,255,255,0.2)';
+            if (icon) icon.style.transform = 'rotate(180deg)';
+
+        }
+    });
+
+    document.getElementById('ic-nodes-search').addEventListener('input', function(e) {
+        const query = e.target.value.toLowerCase();
+        const settingsCol = document.getElementById('ic-nodes-settings-col');
+        const groups = settingsCol.querySelectorAll('.ic-plugin-setting-group');
+        groups.forEach(group => {
+            const text = group.innerText.toLowerCase();
+            if (text.includes(query)) {
+                group.style.display = 'block';
+            } else {
+                group.style.display = 'none';
+            }
+        });
+    });
+
+    // Fluent Design & Ripple Effects (Global)
+    document.addEventListener('mousemove', function(e) {
+        const cards = document.querySelectorAll('.fluent-card, .fluent-panel, .res-preset-btn');
+        cards.forEach(card => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            card.style.setProperty('--mouse-x', `${x}px`);
+            card.style.setProperty('--mouse-y', `${y}px`);
+        });
+    });
+
+    document.addEventListener('mousedown', function(e) {
+        const target = e.target.closest('.fluent-card, #ic-nodes-toggle, #ic-nodes-panel button, .ic-pipeline-node, .res-preset-btn');
+        if (!target) return;
+        const rect = target.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const ripple = document.createElement('span');
+        ripple.className = 'ic-ripple';
+        ripple.style.left = `${x}px`;
+        ripple.style.top = `${y}px`;
+        
+        // Prevent overflow issues on some elements
+        if (target.id === 'ic-nodes-toggle') target.style.overflow = 'hidden';
+
+        target.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    });
+
+
+
+    const dynamicModalHTML = `
+    <div id="ic_dynamic_modal" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; flex-direction:column; font-family:sans-serif; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+        <div class="fluent-panel" style="max-width:600px; width:100%; padding:24px; border-radius:24px; position:relative; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); border:1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.2);">
+            <h3 id="ic_dynamic_modal_title" style="margin-top:0; margin-bottom:20px; color:var(--body-text-color, #fff); font-size: 20px;">Dialog</h3>
+            <div id="ic_dynamic_modal_content"></div>
+        </div>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', dynamicModalHTML);
 
     // --- FLOATING TOOLBAR INJECTION ---
     const floatingToolbarHTML = `
-    <div id="ic-floating-toolbar" style="
+    <div id="ic-floating-toolbar" class="fluent-panel" style="
         position: absolute;
         bottom: 20px;
         left: 50%;
@@ -107,39 +362,41 @@ const canvas = document.getElementById('ic-canvas');
         display: flex;
         flex-direction: column;
         gap: 8px;
-        background: rgba(255, 255, 255, 0.7);
+        background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.8);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), inset 1px 1px 0 rgba(255, 255, 255, 0.2);
         z-index: 1000;
         pointer-events: auto;
         user-select: none;
+        cursor: default;
         width: max-content;
         max-width: 95%;
     ">
         <!-- Top Row: Tools & Undo/Redo & Toggles -->
         <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;">
-            <button id="ic_float_undo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas ⏪')}</button>
-            <button id="ic_float_redo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas ⏩')}</button>
+            <button id="ic_float_undo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;"><span style="font-size: 16px; vertical-align: middle; margin-right: 4px; display: inline-flex;">${IC_ICONS.undo}</span>${t('Canvas')}</button>
+            <button id="ic_float_redo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas')}<span style="font-size: 16px; vertical-align: middle; margin-left: 4px; display: inline-flex;">${IC_ICONS.redo}</span></button>
 
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
 
-            <button id="ic_float_mask_undo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask ⏪')}</button>
-            <button id="ic_float_mask_redo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask ⏩')}</button>
+            <button id="ic_float_mask_undo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;"><span style="font-size: 16px; vertical-align: middle; margin-right: 4px; display: inline-flex;">${IC_ICONS.undo}</span>${t('Mask')}</button>
+            <button id="ic_float_mask_redo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask')}<span style="font-size: 16px; vertical-align: middle; margin-left: 4px; display: inline-flex;">${IC_ICONS.redo}</span></button>
             
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
             
-            <button id="ic_float_rect" class="res-preset-btn primary float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Rect')}">🔲</button>
-            <button id="ic_float_brush" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Brush')}">🖌️</button>
-            <button id="ic_float_ellipse" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Ellipse')}">🔵</button>
-            <button id="ic_float_eraser" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Eraser')}">🧼</button>
-            <button id="ic_float_magic" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('🪄 Magic Wand')} \n${t('Click inside the blue box to auto-segment')}">🪄</button>
+            <button id="ic_float_rect" class="res-preset-btn primary float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Rect')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.rectangle}</span></button>
+            <button id="ic_float_brush" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Brush')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.brush}</span></button>
+            <button id="ic_float_ellipse" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Ellipse')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.circle}</span></button>
+            <button id="ic_float_eraser" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Eraser')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.ink_eraser}</span></button>
+            <button id="ic_float_magic" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('🪄 Magic Wand')} \n${t('Click inside the blue box to auto-segment')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.auto_fix_high}</span></button>
             
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
             
+            <button id="ic_float_autosave" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Save')}</button>
             <button id="ic_float_overlay" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Show Overlays')}</button>
             <button id="ic_float_autoscale" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Scale Canvas')}</button>
         </div>
@@ -168,17 +425,26 @@ const canvas = document.getElementById('ic-canvas');
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
             
             <button id="ic_float_clear" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Clear Mask')}</button>
+            <button id="ic_float_autocrop" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Crop')}</button>
             <button id="ic_float_reset" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Reset Canvas')}</button>
             <button id="ic_float_download" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Download Canvas')}</button>
             <button id="ic_float_copy" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Copy Canvas')}</button>
-            <button id="ic_float_guide" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('📖 Guide')}</button>
+            <button id="ic_float_guide" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Guide')}</button>
+            <button id="ic_float_projects" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;" title="${t('Projects')}"><span style="font-size: 18px; vertical-align: middle; margin-right: 6px; display: inline-flex;">${IC_ICONS.projects}</span>${t('Projects')}</button>
         </div>
     </div>
+    
+    <!-- Floating Popup for Auto Crop -->
+    <div id="ic_crop_popup" style="opacity: 0; pointer-events: none; position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%) translateY(10px) scale(0.95); transition: opacity 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); padding: 8px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 5px; z-index: 1001;">
+        <button id="ic_crop_black" class="res-preset-btn" style="padding: 6px 12px; font-size: 13px; background: #000 !important; color: #fff !important; width: 100%; justify-content: center;">${typeof t === 'function' ? t('Crop Pure Black') : 'Crop Pure Black'}</button>
+        <button id="ic_crop_white" class="res-preset-btn" style="padding: 6px 12px; font-size: 13px; background: #fff !important; color: #000 !important; border: 1px solid #ccc !important; width: 100%; justify-content: center;">${typeof t === 'function' ? t('Crop Pure White') : 'Crop Pure White'}</button>
+        <div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid rgba(255, 255, 255, 0.95);"></div>
+    </div>
+
     <style>
     .res-preset-btn {
         background: #ffffff !important;
         color: #333333 !important;
-        border: 1px solid #dddddd !important;
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -196,17 +462,20 @@ const canvas = document.getElementById('ic-canvas');
     }
     .res-preset-btn:hover {
         background: #f2f2f2 !important;
-        border-color: #cccccc !important;
     }
     .res-preset-btn.primary {
         background: cornflowerblue !important;
-        border-color: cornflowerblue !important;
         color: white !important;
+        --ic-border-color: color-mix(in srgb, cornflowerblue 70%, black);
+        --ic-glow-color: rgba(255, 255, 255, 0.8);
         box-shadow: 0 2px 6px rgba(100, 149, 237, 0.3);
+    }
+    .res-preset-btn.primary svg, .res-preset-btn.primary svg path {
+        fill: white !important;
+        color: white !important;
     }
     .res-preset-btn.primary:hover {
         background: #5a85de !important;
-        border-color: #5a85de !important;
     }
     .res-preset-icon {
         border: 2px solid currentColor;
@@ -244,11 +513,9 @@ const canvas = document.getElementById('ic-canvas');
     if (icContainer && icToolbar) {
         const observer = new MutationObserver(() => {
             const m1 = document.getElementById('ic-modal-overlay');
-            const m2 = document.getElementById('ic-session-modal');
             const m3 = document.getElementById('ic-guide-modal');
             
             const isAnyModalOpen = (m1 && m1.style.display !== 'none') || 
-                                   (m2 && m2.style.display !== 'none') || 
                                    (m3 && m3.style.display !== 'none');
                                    
             if (isAnyModalOpen) {
@@ -424,11 +691,18 @@ const canvas = document.getElementById('ic-canvas');
         }
         
         // Actions
-        document.getElementById('ic_float_clear')?.addEventListener('click', () => {
-            document.getElementById('ic_clear_mask')?.click();
-        });
-        document.getElementById('ic_float_reset')?.addEventListener('click', () => document.getElementById('ic_reset_btn')?.click());
-        document.getElementById('ic_float_download')?.addEventListener('click', () => document.getElementById('ic_download_btn')?.click());
+        function clickGradioBtn(id) {
+            let btn = document.getElementById(id);
+            if (!btn) return;
+            if (btn.tagName !== 'BUTTON') {
+                const inner = btn.querySelector('button');
+                if (inner) btn = inner;
+            }
+            btn.click();
+        }
+        document.getElementById('ic_float_clear')?.addEventListener('click', () => clickGradioBtn('ic_clear_mask'));
+        document.getElementById('ic_float_reset')?.addEventListener('click', () => clickGradioBtn('ic_reset_btn'));
+        document.getElementById('ic_float_download')?.addEventListener('click', () => clickGradioBtn('ic_download_btn'));
         const floatCopyBtn = document.getElementById('ic_float_copy');
         if (floatCopyBtn) {
             floatCopyBtn.addEventListener('click', () => {
@@ -461,7 +735,139 @@ const canvas = document.getElementById('ic-canvas');
                 window.ic_brush_size = parseInt(e.target.value, 10);
             });
         }
+
+        const autoCropBtn = document.getElementById('ic_float_autocrop');
+        const cropPopup = document.getElementById('ic_crop_popup');
+        if (autoCropBtn && cropPopup) {
+            autoCropBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (cropPopup.style.opacity === '0') {
+                    cropPopup.style.opacity = '1';
+                    cropPopup.style.pointerEvents = 'auto';
+                    cropPopup.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+                    const btnRect = autoCropBtn.getBoundingClientRect();
+                    const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+                    const offsetLeft = (btnRect.left + btnRect.width / 2) - containerRect.left;
+                    cropPopup.style.left = offsetLeft + 'px';
+                } else {
+                    cropPopup.style.opacity = '0';
+                    cropPopup.style.pointerEvents = 'none';
+                    cropPopup.style.transform = 'translateX(-50%) translateY(10px) scale(0.95)';
+                }
+            });
+            document.addEventListener('click', (e) => {
+                if (!autoCropBtn.contains(e.target) && !cropPopup.contains(e.target)) {
+                    cropPopup.style.opacity = '0';
+                    cropPopup.style.pointerEvents = 'none';
+                    cropPopup.style.transform = 'translateX(-50%) translateY(10px) scale(0.95)';
+                }
+            });
+
+            document.getElementById('ic_crop_black')?.addEventListener('click', () => {
+                cropPopup.style.opacity = '0';
+                cropPopup.style.pointerEvents = 'none';
+                window.ic_autoCrop('black');
+            });
+            document.getElementById('ic_crop_white')?.addEventListener('click', () => {
+                cropPopup.style.opacity = '0';
+                cropPopup.style.pointerEvents = 'none';
+                window.ic_autoCrop('white');
+            });
+        }
     }, 1000);
+
+    window.ic_autoCrop = function(mode) {
+        if (!window.ic_tiles || Object.keys(window.ic_tiles).length === 0) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        const TILE_SIZE = 1024;
+        const canvas = document.createElement('canvas');
+        canvas.width = TILE_SIZE;
+        canvas.height = TILE_SIZE;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const tileDataList = [];
+        for (const key in window.ic_tiles) {
+            const tileImg = window.ic_tiles[key];
+            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                ctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+                ctx.drawImage(tileImg, 0, 0);
+                const imgData = ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE).data;
+                const [tx, ty] = key.split(',').map(Number);
+                
+                let localMinX = TILE_SIZE, localMinY = TILE_SIZE, localMaxX = -1, localMaxY = -1;
+                for (let y = 0; y < TILE_SIZE; y++) {
+                    for (let x = 0; x < TILE_SIZE; x++) {
+                        const i = (y * TILE_SIZE + x) * 4;
+                        if (imgData[i+3] > 0) {
+                            const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+                            let isTarget = false;
+                            if (mode === 'black') isTarget = (r <= 5 && g <= 5 && b <= 5);
+                            if (mode === 'white') isTarget = (r >= 250 && g >= 250 && b >= 250);
+                            
+                            if (!isTarget) {
+                                if (x < localMinX) localMinX = x;
+                                if (x > localMaxX) localMaxX = x;
+                                if (y < localMinY) localMinY = y;
+                                if (y > localMaxY) localMaxY = y;
+                            }
+                        }
+                    }
+                }
+                
+                if (localMaxX >= 0) {
+                    const globalX1 = tx * TILE_SIZE + localMinX;
+                    const globalY1 = ty * TILE_SIZE + localMinY;
+                    const globalX2 = tx * TILE_SIZE + localMaxX;
+                    const globalY2 = ty * TILE_SIZE + localMaxY;
+                    if (globalX1 < minX) minX = globalX1;
+                    if (globalY1 < minY) minY = globalY1;
+                    if (globalX2 > maxX) maxX = globalX2;
+                    if (globalY2 > maxY) maxY = globalY2;
+                }
+                tileDataList.push({ key, tx, ty, img: tileImg });
+            }
+        }
+        
+        if (minX > maxX) return; // Empty or fully target color
+        
+        let changedTiles = 0;
+        for (const t of tileDataList) {
+            const tileGlobalX1 = t.tx * TILE_SIZE;
+            const tileGlobalY1 = t.ty * TILE_SIZE;
+            const tileGlobalX2 = tileGlobalX1 + TILE_SIZE - 1;
+            const tileGlobalY2 = tileGlobalY1 + TILE_SIZE - 1;
+            
+            if (tileGlobalX2 < minX || tileGlobalX1 > maxX || tileGlobalY2 < minY || tileGlobalY1 > maxY) {
+                delete window.ic_tiles[t.key];
+                changedTiles++;
+            } else {
+                const needsCropLeft = tileGlobalX1 < minX;
+                const needsCropRight = tileGlobalX2 > maxX;
+                const needsCropTop = tileGlobalY1 < minY;
+                const needsCropBottom = tileGlobalY2 > maxY;
+                
+                if (needsCropLeft || needsCropRight || needsCropTop || needsCropBottom) {
+                    ctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+                    ctx.drawImage(t.img, 0, 0);
+                    
+                    if (needsCropTop) ctx.clearRect(0, 0, TILE_SIZE, minY - tileGlobalY1);
+                    if (needsCropBottom) ctx.clearRect(0, maxY - tileGlobalY1 + 1, TILE_SIZE, tileGlobalY2 - maxY);
+                    if (needsCropLeft) ctx.clearRect(0, 0, minX - tileGlobalX1, TILE_SIZE);
+                    if (needsCropRight) ctx.clearRect(maxX - tileGlobalX1 + 1, 0, tileGlobalX2 - maxX, TILE_SIZE);
+                    
+                    const newImg = new Image();
+                    newImg.src = canvas.toDataURL('image/png');
+                    window.ic_tiles[t.key] = newImg;
+                    changedTiles++;
+                }
+            }
+        }
+        
+        if (changedTiles > 0) {
+            if (typeof window.ic_saveState === 'function') window.ic_saveState();
+            if (typeof window.ic_draw === 'function') window.ic_draw();
+        }
+    };
 
     window.ic_stitchTilesToBlob = function(callback) {
         if (!window.ic_tiles || Object.keys(window.ic_tiles).length === 0) {
@@ -470,14 +876,35 @@ const canvas = document.getElementById('ic-canvas');
         }
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         const TILE_SIZE = 1024;
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = TILE_SIZE;
+        tempCanvas.height = TILE_SIZE;
+        const tctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        
+        const validTiles = [];
+        
         for (const key in window.ic_tiles) {
-            const [tx, ty] = key.split(',').map(Number);
             const tileImg = window.ic_tiles[key];
             if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-                minX = Math.min(minX, tx * TILE_SIZE);
-                minY = Math.min(minY, ty * TILE_SIZE);
-                maxX = Math.max(maxX, tx * TILE_SIZE + tileImg.naturalWidth);
-                maxY = Math.max(maxY, ty * TILE_SIZE + tileImg.naturalHeight);
+                tctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+                tctx.drawImage(tileImg, 0, 0);
+                const imgData = tctx.getImageData(0, 0, tileImg.naturalWidth, tileImg.naturalHeight).data;
+                let isEmpty = true;
+                for (let i = 3; i < imgData.length; i += 4) {
+                    if (imgData[i] > 0) {
+                        isEmpty = false;
+                        break;
+                    }
+                }
+                if (!isEmpty) {
+                    const [tx, ty] = key.split(',').map(Number);
+                    validTiles.push({tx, ty, tileImg});
+                    minX = Math.min(minX, tx * TILE_SIZE);
+                    minY = Math.min(minY, ty * TILE_SIZE);
+                    maxX = Math.max(maxX, tx * TILE_SIZE + tileImg.naturalWidth);
+                    maxY = Math.max(maxY, ty * TILE_SIZE + tileImg.naturalHeight);
+                }
             }
         }
         if (minX === Infinity) {
@@ -488,12 +915,8 @@ const canvas = document.getElementById('ic-canvas');
         offscreen.width = maxX - minX;
         offscreen.height = maxY - minY;
         const octx = offscreen.getContext('2d');
-        for (const key in window.ic_tiles) {
-            const [tx, ty] = key.split(',').map(Number);
-            const tileImg = window.ic_tiles[key];
-            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-                octx.drawImage(tileImg, tx * TILE_SIZE - minX, ty * TILE_SIZE - minY);
-            }
+        for (const item of validTiles) {
+            octx.drawImage(item.tileImg, item.tx * TILE_SIZE - minX, item.ty * TILE_SIZE - minY);
         }
         offscreen.toBlob((blob) => {
             callback(blob);
@@ -504,12 +927,7 @@ const canvas = document.getElementById('ic-canvas');
     
     // Initial size
     
-    
-    setTimeout(() => {
-        const btn = document.getElementById('ic_check_session_btn');
-        if (btn) btn.click();
-    }, 1500);
-    
+
     
     const resizeObserver = new ResizeObserver(() => {
         if (container.clientWidth > 0 && container.clientHeight > 0) {

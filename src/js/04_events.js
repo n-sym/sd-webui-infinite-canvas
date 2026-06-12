@@ -56,6 +56,22 @@
         const inSource = isPointInRect(w.x, w.y, sourceRect);
         
         if (e.button === 1) {
+            if (e.altKey) {
+                // Alt + Middle click: reset blue box position, size, and rotation
+                sourceRect.x = 0;
+                sourceRect.y = 0;
+                if (sourceRect.angle !== undefined) sourceRect.angle = 0;
+                
+                if (typeof getGenSize === 'function') {
+                    const genSize = getGenSize();
+                    sourceRect.w = genSize.w;
+                    sourceRect.h = genSize.h;
+                    if (typeof clearMask === 'function') {
+                        clearMask();
+                    }
+                }
+            }
+            
             scale = 1;
             offsetX = canvas.width / 2 - (sourceRect.x + sourceRect.w / 2);
             offsetY = canvas.height / 2 - (sourceRect.y + sourceRect.h / 2);

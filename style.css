@@ -1,12 +1,14 @@
 /* Infinite Canvas Extension Styles */
 
 #ic-container {
-    background-color: #222;
+    --checker-bg: var(--body-background-fill, #ffffff);
+    --checker-fg: color-mix(in srgb, var(--checker-bg) 87.5%, #000);
+    background-color: var(--checker-bg);
     background-image: 
-        linear-gradient(45deg, #333 25%, transparent 25%, transparent 75%, #333 75%, #333), 
-        linear-gradient(45deg, #333 25%, transparent 25%, transparent 75%, #333 75%, #333);
-    background-size: 20px 20px;
-    background-position: 0 0, 10px 10px;
+        linear-gradient(45deg, var(--checker-fg) 25%, transparent 25%, transparent 75%, var(--checker-fg) 75%, var(--checker-fg)), 
+        linear-gradient(45deg, var(--checker-fg) 25%, transparent 25%, transparent 75%, var(--checker-fg) 75%, var(--checker-fg));
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
 }
 
 #ic-canvas {
@@ -17,7 +19,7 @@
     margin-top: 10px;
 }
 
-#ic_payload, #ic_output, #ic_trigger, #ic_html_info {
+#ic_payload, #ic_output, #ic_trigger, #ic_html_info, #ic_reset_btn_hidden {
     display: none !important;
 }
 

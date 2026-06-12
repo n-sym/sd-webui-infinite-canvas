@@ -11,4 +11,5 @@ function ic_setRes(w, h) {
     
     if (hEl) { hEl.value = h; hEl.dispatchEvent(new Event('input', {bubbles: true})); }
     if (hRange) { hRange.value = h; hRange.dispatchEvent(new Event('input', {bubbles: true})); }
+    if (typeof draw === 'function') draw();
 }
