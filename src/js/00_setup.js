@@ -48,13 +48,13 @@ function t(enStr) {
         'Blend Power': '融合强度',
         'Edge Fix Post-Process': '边缘二次修复',
         'Fix Power': '修复强度',
-        'Append Close-Up': '末尾追加 close-up',
-        'Core: Parse Input': 'Core: 处理输入',
-        'Core: Prep Canvas': 'Core: 画布预处理',
-        'Core: Setup SD': 'Core: 设置 SD',
-        'Core: Generation': 'Core: 图像生成',
-        'FirstPass Review': 'FirstPass 预览审查',
-        'Core: Finalize': 'Core: 结束',
+        'Append Close-Up': '末尾追加close-up',
+        'SD-Style Input': 'SD风格输入',
+        'Prepare Canvas': '画布预处理',
+        'Setup SD': '设置SD',
+        'Generation': '图像生成',
+        'Get Final Image': '结束',
+        'FirstPass Review': 'FirstPass预览审查',
         'Mask Tool': '蒙版工具',
         'Show Overlays': '显示覆盖层',
         'Auto Scale Canvas': '自动缩放画布',
@@ -114,7 +114,7 @@ function t(enStr) {
         'Scale Factor': '放大倍数',
         'Tile Overlap': '切片重叠像素',
         'Tile Batch Size': '并行处理切片数 (Batch Size)',
-        'Steps': '独立步数',
+        'Steps': '步数',
         'Denoising Strength': '重绘幅度',
         'Manual Prompt Review': '手动提示词审查',
         'Autosaving...': '自动保存中...',
@@ -144,53 +144,51 @@ function t(enStr) {
 window.t = t;
 window.__ic_i18n = t;
 
-document.addEventListener("DOMContentLoaded", function() {
-    function translateGradio() {
-        if (!isZh) return;
-        const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_accordion_workflow', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-                let node;
-                while (node = walker.nextNode()) {
-                    const text = node.nodeValue.trim();
-                    if (t(text) !== text) node.nodeValue = node.nodeValue.replace(text, t(text));
-                }
+function translateGradio() {
+    if (!isZh) return;
+    const ids = ['ic_prev_btn', 'ic_now_btn', 'ic_reset_btn', 'ic_download_btn', 'ic_guide_btn', 'ic_clear_mask', 'ic_upload_image', 'ic_accordion_upload', 'ic_accordion_canvas', 'ic_accordion_gen', 'ic_accordion_project', 'ic_accordion_workflow', 'ic_tool_label', 'ic_tool', 'ic_show_overlay', 'ic_auto_scale', 'ic_edge_fix', 'ic_edge_fix_power', 'ic_latent_blend', 'ic_latent_blend_power', 'ic_tool_rect', 'ic_tool_brush', 'ic_tool_ellipse', 'ic_tool_eraser', 'ic_copy_btn', 'ic_show_overlay_btn', 'ic_auto_scale_btn', 'ic_save_project_btn', 'ic_load_project_btn', 'ic_project_name', 'ic_outpaint_pad'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            let node;
+            while (node = walker.nextNode()) {
+                const text = node.nodeValue.trim();
+                if (t(text) !== text) node.nodeValue = node.nodeValue.replace(text, t(text));
             }
-        });
-    }
-
-    // Run translation once immediately, then observe for future DOM changes
-    const icContainer = document.getElementById('ic-container');
-    if (icContainer) {
-        translateGradio();
-        const gradioObserver = new MutationObserver(() => {
-            translateGradio();
-        });
-        gradioObserver.observe(icContainer, { childList: true, subtree: true });
-    } else {
-        // Fallback: container not ready yet, retry after init
-        setTimeout(() => {
-            translateGradio();
-            const container = document.getElementById('ic-container');
-            if (container) {
-                const gradioObserver = new MutationObserver(() => {
-                    translateGradio();
-                });
-                gradioObserver.observe(container, { childList: true, subtree: true });
-            }
-        }, 2000);
-    }
-
-    let initInterval = setInterval(() => {
-        const container = document.getElementById('ic-container');
-        const lastElement = document.getElementById('ic_html_info');
-        if (container && lastElement) {
-            clearInterval(initInterval);
-            initInfiniteCanvas();
         }
-    }, 500);
-});
+    });
+}
+
+// Run translation once immediately, then observe for future DOM changes
+const icContainer = document.getElementById('ic-container');
+if (icContainer) {
+    translateGradio();
+    const gradioObserver = new MutationObserver(() => {
+        translateGradio();
+    });
+    gradioObserver.observe(icContainer, { childList: true, subtree: true });
+} else {
+    // Fallback: container not ready yet, retry after init
+    setTimeout(() => {
+        translateGradio();
+        const container = document.getElementById('ic-container');
+        if (container) {
+            const gradioObserver = new MutationObserver(() => {
+                translateGradio();
+            });
+            gradioObserver.observe(container, { childList: true, subtree: true });
+        }
+    }, 2000);
+}
+
+let ic_initInterval = setInterval(() => {
+    const container = document.getElementById('ic-container');
+    const lastElement = document.getElementById('ic_html_info');
+    if (container && lastElement) {
+        clearInterval(ic_initInterval);
+        initInfiniteCanvas();
+    }
+}, 500);
 
 function initInfiniteCanvas() {

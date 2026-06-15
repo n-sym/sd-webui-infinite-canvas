@@ -429,8 +429,14 @@ const IC_ICONS = {
             <button id="ic_float_reset" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Reset Canvas')}</button>
             <button id="ic_float_download" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Download Canvas')}</button>
             <button id="ic_float_copy" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Copy Canvas')}</button>
-            <button id="ic_float_guide" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Guide')}</button>
+            <button id="ic_float_upload" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Upload Base Image')}</button>
+            <input type="file" id="ic_float_upload_input" accept=".png,.jpg,.jpeg,.webp" style="display: none;" />
             <button id="ic_float_projects" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;" title="${t('Projects')}"><span style="font-size: 18px; vertical-align: middle; margin-right: 6px; display: inline-flex;">${IC_ICONS.projects}</span>${t('Projects')}</button>
+
+            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
+
+            <button id="ic-sidebar-generate-btn" class="res-preset-btn primary" style="height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 12px rgba(100, 149, 237, 0.4);">${t('Generate')}</button>
+            <button id="ic-sidebar-interrupt-btn" class="res-preset-btn" style="display: none; height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; background: #e53e3e !important; color: white !important; box-shadow: 0 4px 12px rgba(229, 62, 62, 0.4) !important;">${t('Interrupt')}</button>
         </div>
     </div>
     
@@ -448,17 +454,18 @@ const IC_ICONS = {
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        height: 36px !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 36px;
         font-family: sans-serif;
         font-weight: 500;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
         box-sizing: border-box !important;
-        margin: 0 !important;
-        white-space: nowrap !important;
-        line-height: 1 !important;
+        margin: 0;
+        margin-bottom: 0 !important;
+        white-space: nowrap;
+        line-height: 1;
     }
     .res-preset-btn:hover {
         background: #f2f2f2 !important;
@@ -468,7 +475,7 @@ const IC_ICONS = {
         color: white !important;
         --ic-border-color: color-mix(in srgb, cornflowerblue 70%, black);
         --ic-glow-color: rgba(255, 255, 255, 0.8);
-        box-shadow: 0 2px 6px rgba(100, 149, 237, 0.3);
+        box-shadow: 0 2px 6px rgba(100, 149, 237, 0.3) !important;
     }
     .res-preset-btn.primary svg, .res-preset-btn.primary svg path {
         fill: white !important;
@@ -601,8 +608,39 @@ const IC_ICONS = {
         });
         
         // Undo / Redo
-        document.getElementById('ic_float_undo')?.addEventListener('click', () => document.getElementById('ic_prev_btn')?.click());
-        document.getElementById('ic_float_redo')?.addEventListener('click', () => document.getElementById('ic_now_btn')?.click());
+        document.getElementById('ic_float_undo')?.addEventListener('click', async () => {
+            if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Undoing...") : "Undoing...", 0, 'white', 'ic-save-toast');
+            try {
+                const res = await fetch('/infinite-canvas-api/canvas/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: 'prev' })
+                });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Undo failed", e);
+            } finally {
+                if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+            }
+        });
+
+        document.getElementById('ic_float_redo')?.addEventListener('click', async () => {
+            if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Redoing...") : "Redoing...", 0, 'white', 'ic-save-toast');
+            try {
+                const res = await fetch('/infinite-canvas-api/canvas/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: 'now' })
+                });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Redo failed", e);
+            } finally {
+                if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+            }
+        });
 
         // Mask Undo / Redo
         document.getElementById('ic_float_mask_undo')?.addEventListener('click', undoMask);
@@ -686,7 +724,7 @@ const IC_ICONS = {
             floatAutoScaleBtn.addEventListener('click', () => {
                 window.ic_auto_scale_state = !window.ic_auto_scale_state;
                 
-                const autoScaleCb = document.querySelector('#ic_auto_scale input[type="checkbox"]');
+                const autoScaleCb = document.querySelector('input.ic-node-param[data-node-id="parse_input"][data-param-name="auto_scale"]');
                 if(autoScaleCb && autoScaleCb.checked !== window.ic_auto_scale_state) autoScaleCb.click();
                 
                 if (window.ic_auto_scale_state) floatAutoScaleBtn.classList.add('primary');
@@ -715,9 +753,37 @@ const IC_ICONS = {
             }
             btn.click();
         }
-        document.getElementById('ic_float_clear')?.addEventListener('click', () => clickGradioBtn('ic_clear_mask'));
-        document.getElementById('ic_float_reset')?.addEventListener('click', () => clickGradioBtn('ic_reset_btn'));
-        document.getElementById('ic_float_download')?.addEventListener('click', () => clickGradioBtn('ic_download_btn'));
+        document.getElementById('ic_float_clear')?.addEventListener('click', () => {
+            if (confirm(typeof t === 'function' ? t("Are you sure you want to clear the mask?") : "Are you sure you want to clear the mask?")) {
+                if (typeof clearMask === 'function') clearMask();
+                if (typeof draw === 'function') draw();
+            }
+        });
+        document.getElementById('ic_float_reset')?.addEventListener('click', async () => {
+            if (confirm(typeof t === 'function' ? t("Are you sure you want to reset the entire canvas?") : "Are you sure you want to reset the entire canvas?")) {
+                try {
+                    const res = await fetch('/infinite-canvas-api/canvas/reset', { method: 'POST' });
+                    const data = await res.json();
+                    if (window.ic_handle_payload) window.ic_handle_payload(data);
+                } catch (e) { console.error("Reset failed", e); }
+            }
+        });
+        document.getElementById('ic_float_download')?.addEventListener('click', () => {
+            if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
+                window.ic_stitchTilesToBlob((blob) => {
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'canvas.png';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                });
+            }
+        });
         const floatCopyBtn = document.getElementById('ic_float_copy');
         if (floatCopyBtn) {
             floatCopyBtn.addEventListener('click', () => {
@@ -739,7 +805,37 @@ const IC_ICONS = {
                 }
             });
         }
-        document.getElementById('ic_float_guide')?.addEventListener('click', () => document.getElementById('ic_guide_btn')?.click());
+        const floatUploadBtn = document.getElementById('ic_float_upload');
+        const floatUploadInput = document.getElementById('ic_float_upload_input');
+        if (floatUploadBtn && floatUploadInput) {
+            floatUploadBtn.addEventListener('click', () => floatUploadInput.click());
+            floatUploadInput.addEventListener('change', async (e) => {
+                if (!e.target.files || e.target.files.length === 0) return;
+                const file = e.target.files[0];
+                if (window.lockProjectUI) window.lockProjectUI();
+                if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Uploading image...") : "Uploading image...", 0, 'white', 'ic-save-toast');
+                
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const res = await fetch('/infinite-canvas-api/upload', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image_b64: event.target.result })
+                        });
+                        const data = await res.json();
+                        if (window.ic_handle_payload) window.ic_handle_payload(data);
+                    } catch (err) {
+                        console.error("Upload failed:", err);
+                    } finally {
+                        if (window.unlockProjectUI) window.unlockProjectUI();
+                        if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+                        floatUploadInput.value = ''; // Reset input
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
         
         const brushSizeSlider = document.getElementById('ic_float_brush_size');
         const brushSizeVal = document.getElementById('ic_float_brush_size_val');
@@ -892,34 +988,17 @@ const IC_ICONS = {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         const TILE_SIZE = 1024;
         
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = TILE_SIZE;
-        tempCanvas.height = TILE_SIZE;
-        const tctx = tempCanvas.getContext('2d', { willReadFrequently: true });
-        
         const validTiles = [];
         
         for (const key in window.ic_tiles) {
             const tileImg = window.ic_tiles[key];
             if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-                tctx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
-                tctx.drawImage(tileImg, 0, 0);
-                const imgData = tctx.getImageData(0, 0, tileImg.naturalWidth, tileImg.naturalHeight).data;
-                let isEmpty = true;
-                for (let i = 3; i < imgData.length; i += 4) {
-                    if (imgData[i] > 0) {
-                        isEmpty = false;
-                        break;
-                    }
-                }
-                if (!isEmpty) {
-                    const [tx, ty] = key.split(',').map(Number);
-                    validTiles.push({tx, ty, tileImg});
-                    minX = Math.min(minX, tx * TILE_SIZE);
-                    minY = Math.min(minY, ty * TILE_SIZE);
-                    maxX = Math.max(maxX, tx * TILE_SIZE + tileImg.naturalWidth);
-                    maxY = Math.max(maxY, ty * TILE_SIZE + tileImg.naturalHeight);
-                }
+                const [tx, ty] = key.split(',').map(Number);
+                validTiles.push({tx, ty, tileImg});
+                minX = Math.min(minX, tx * TILE_SIZE);
+                minY = Math.min(minY, ty * TILE_SIZE);
+                maxX = Math.max(maxX, tx * TILE_SIZE + tileImg.naturalWidth);
+                maxY = Math.max(maxY, ty * TILE_SIZE + tileImg.naturalHeight);
             }
         }
         if (minX === Infinity) {

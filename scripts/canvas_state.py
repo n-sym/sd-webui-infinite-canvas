@@ -138,8 +138,14 @@ class CanvasState:
             }
 
         def autosave_task():
+            if not getattr(self, 'autosave_enabled', True):
+                return
             self.autosave_status = "saving"
             try:
+                import asyncio
+                from scripts.ic_server.api_routes import manager
+                # Tell the frontend we're saving so it can open the toast.
+                manager.broadcast_from_thread({"type": "autosave", "status": "saving"})
                 import zipfile, json
                 from io import BytesIO
 
@@ -197,8 +203,22 @@ class CanvasState:
                     f.write(zip_buffer.getvalue())
 
                 print(f"[Infinite Canvas] Autosaved background project successfully to {autosave_path}.")
+
+                try:
+                    from scripts.ic_server.api_routes import manager
+                    # Signal completion: this closes the "saving" toast AND shows the "Autosaved" confirmation.
+                    manager.broadcast_from_thread({"type": "autosave", "status": "done"})
+                except Exception as e:
+                    print(f"[Infinite Canvas] Failed to broadcast autosave toast: {e}")
+
             except Exception as e:
                 print(f"[Infinite Canvas] Autosave failed: {e}")
+                # On failure still close the "saving" state so the UI doesn't hang.
+                try:
+                    from scripts.ic_server.api_routes import manager
+                    manager.broadcast_from_thread({"type": "autosave", "status": "done"})
+                except Exception:
+                    pass
             finally:
                 self.autosave_status = "done"
 

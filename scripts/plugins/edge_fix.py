@@ -9,19 +9,26 @@ class EdgeFixStep(GenerationStep):
     name = "Edge Fix Post-Process"
     is_plugin = True
     sort_index = 500
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["GeneratedImage", "InputMask"], "out": ["GeneratedImage"]}
     
     @classmethod
     def get_params(cls):
         return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False, "is_generation_param": False},
             {"name": "power", "label": "Fix Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.5, "step": 0.01}
         ]
         
     @classmethod
     def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        def _get(k, default):
+            v = raw_params.get(k)
+            return default if v is None else v
         return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "power": float(raw_params.get("power", 1.0))
+            "enabled": bool(_get("enabled", False)),
+            "power": float(_get("power", 1.0))
         }
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
@@ -105,7 +112,7 @@ class EdgeFixStep(GenerationStep):
                 prompt=ctx.prompt, negative_prompt=ctx.negative_prompt, seed=ctx.seed, subseed=-1, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, seed_enable_extras=False,
                 sampler_name=ctx.sampler_name, scheduler=ctx.scheduler, batch_size=1, n_iter=1, steps=max(1, int(ctx.steps * 0.2 * power)),
                 cfg_scale=ctx.cfg_scale, distilled_cfg_scale=ctx.shift, width=ctx.gen_width, height=ctx.gen_height, restore_faces=False, tiling=False,
-                init_images=[ctx.result_img], mask=hard_edge_mask, mask_blur=4, inpainting_fill=ctx.inpainting_fill_idx, resize_mode=0,
+                init_images=[ctx.result_img], mask=hard_edge_mask, mask_blur=4, inpainting_fill=["fill", "original", "latent noise", "latent nothing"].index(ctx.inpainting_fill) if ctx.inpainting_fill in ["fill", "original", "latent noise", "latent nothing"] else 1, resize_mode=0,
                 denoising_strength=(- (ctx.denoising_strength ** 2) / (2 * power) + ctx.denoising_strength), image_cfg_scale=None, inpaint_full_res=False, inpaint_full_res_padding=0, inpainting_mask_invert=0
             )
             p2.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )

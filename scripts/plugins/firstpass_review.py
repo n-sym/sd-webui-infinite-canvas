@@ -14,11 +14,15 @@ class FirstPassReviewStep(GenerationStep):
     name = "FirstPass Review"
     is_plugin = True
     sort_index = 101
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["GeneratedImage"], "out": ["GeneratedImage"]}
     
     @classmethod
     def get_params(cls):
         return [
-            {"name": "enabled", "type": "bool", "label": "Enable", "default": False}
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False, "is_generation_param": False}
         ]
         
     @classmethod

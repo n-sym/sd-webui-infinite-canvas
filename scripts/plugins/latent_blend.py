@@ -55,19 +55,26 @@ class LatentBlendStep(GenerationStep):
     name = "Latent Edge Blend"
     is_plugin = True
     sort_index = 30
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["Resolution", "InputMask"], "out": ["SdProcessing"]}
     
     @classmethod
     def get_params(cls):
         return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False, "is_generation_param": False},
             {"name": "power", "label": "Blend Power", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01}
         ]
         
     @classmethod
     def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        def _get(k, default):
+            v = raw_params.get(k)
+            return default if v is None else v
         return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "power": float(raw_params.get("power", 1.0))
+            "enabled": bool(_get("enabled", False)),
+            "power": float(_get("power", 1.0))
         }
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:

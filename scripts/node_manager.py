@@ -17,6 +17,7 @@ from scripts.plugins.llm_prompt_optimize import LLMPromptOptimizeStep
 from scripts.plugins.append_close_up import AppendCloseUpStep
 from scripts.plugins.prompt_review import PromptReviewStep
 from scripts.plugins.latent_blend import LatentBlendStep
+from scripts.plugins.controlnet import ControlNetStep
 from scripts.plugins.firstpass_review import FirstPassReviewStep
 from scripts.plugins.second_pass import SecondPassStep
 from scripts.plugins.edge_fix import EdgeFixStep
@@ -32,6 +33,7 @@ def execute_pipeline_core(ctx: GenerationCtx):
         PromptReviewStep(),
         SetupProcessingStep(),
         LatentBlendStep(),
+        ControlNetStep(),
         FirstPassStep(),
         FirstPassReviewStep(),
         SecondPassStep(),
@@ -105,6 +107,13 @@ def execute_pipeline_core(ctx: GenerationCtx):
             hue = getattr(step, 'sort_index', 0) % 360
             shared.state.textinfo = f"{getattr(step, 'name', step.id)}|{hue}|{total_steps}|{steps_accumulated}"
             
+            # Force an immediate progress broadcast so instantaneous steps appear in the UI
+            try:
+                from scripts.ic_server.api_routes import manager, _build_progress_payload
+                manager.broadcast_from_thread(_build_progress_payload())
+            except Exception:
+                pass
+            
             # Check if we should actually execute this step during a resume
             if getattr(ctx, "is_resuming", False) and getattr(step, 'sort_index', 0) <= getattr(ctx, "resume_sort_index", 18):
                 continue
@@ -118,27 +127,26 @@ def execute_pipeline_core(ctx: GenerationCtx):
         ctx.error_message = str(e)
         
     if ctx.is_error and ctx.error_message != "":
-        return "", gr.update(), gr.update(), f"Error: {ctx.error_message}"
+        return {"error": ctx.error_message}
         
     if getattr(shared.state, 'interrupted', False) or getattr(shared.state, 'skipped', False):
-        import json
-        payload = {"type": "generation_done", "tiles": []}
-        return json.dumps(payload), gr.update(), gr.update(), ""
+        return {"type": "generation_done", "tiles": []}
         
     if ctx.final_payload:
-        return ctx.final_payload, gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo()), ""
-        
-    return "", gr.update(), gr.update(), ""
+        try:
+            return json.loads(ctx.final_payload)
+        except json.JSONDecodeError:
+            return {"type": "payload", "content": ctx.final_payload}
+            
+    return {}
 
-def api_generate(id_task, payload_json, prompt, negative_prompt, steps, cfg_scale, shift, denoising_strength, sampler_name, scheduler, gen_width, gen_height, seed, inpainting_fill_idx, outpaint_pad, upscaler_name, auto_scale, downscale_algo, compile_preset="Disable"):
-    ctx = GenerationCtx(
-        id_task=id_task, payload_json=payload_json, prompt=prompt, negative_prompt=negative_prompt,
-        steps=steps, cfg_scale=cfg_scale, shift=shift, denoising_strength=denoising_strength,
-        sampler_name=sampler_name, scheduler=scheduler, gen_width=gen_width, gen_height=gen_height,
-        seed=seed, inpainting_fill_idx=inpainting_fill_idx, outpaint_pad=outpaint_pad,
-        upscaler_name=upscaler_name, auto_scale=auto_scale, downscale_algo=downscale_algo
-    )
-    ctx.compile_preset = compile_preset
+def api_generate(id_task, payload_json):
+    # All generation scalars (prompt, steps, cfg, sampler, seed, ...) are now
+    # declared as ParseInputStep params and travel inside payload_json's
+    # step_params['parse_input']. ParseInputStep.__call__ resolves them and
+    # writes them back onto ctx — so api_generate itself only needs the two
+    # positional inputs.
+    ctx = GenerationCtx(id_task=id_task, payload_json=payload_json)
     return execute_pipeline_core(ctx)
 
 def api_cont(id_task, payload_json):
@@ -149,13 +157,12 @@ def api_cont(id_task, payload_json):
         
         import scripts.core_logic
         if session_id not in scripts.core_logic.pending_sessions:
-            return "Session expired."
+            return {"error": "Session expired."}
             
         ctx = scripts.core_logic.pending_sessions.pop(session_id)
         
         if action == "cancel":
-            payload = {"type": "generation_done", "tiles": []}
-            return json.dumps(payload), gr.update(), gr.update(), ""
+            return {"type": "generation_done", "tiles": []}
             
         ctx.prompt = data.get("prompt", ctx.prompt)
         ctx.negative_prompt = data.get("negative_prompt", ctx.negative_prompt)
@@ -167,11 +174,9 @@ def api_cont(id_task, payload_json):
         return execute_pipeline_core(ctx)
     except Exception as e:
         traceback.print_exc()
-        return f"Error: {str(e)}"
+        return {"error": str(e)}
 
 def api_get_workflow():
-    import json
-    
     pipeline_template = [
         ParseInputStep,
         PrepareCanvasStep,
@@ -180,6 +185,7 @@ def api_get_workflow():
         PromptReviewStep,
         SetupProcessingStep,
         LatentBlendStep,
+        ControlNetStep,
         FirstPassStep,
         FirstPassReviewStep,
         SecondPassStep,
@@ -194,32 +200,45 @@ def api_get_workflow():
             "name": getattr(cls, 'name', cls.__name__),
             "is_plugin": getattr(cls, 'is_plugin', False),
             "sort_index": getattr(cls, 'sort_index', 500),
+            "type_signature": getattr(cls, 'type_signature', lambda: {"in": [], "out": []})(),
             "params": cls.get_params()
         })
         
-    return json.dumps({
+    return {
         "type": "workflow_query",
         "workflow": canvas_state.workflow,
         "step_params": canvas_state.step_params,
         "registry": registry
-    })
+    }
 
 def api_update_workflow(payload_json):
-    import json
     if payload_json:
         try:
             data = json.loads(payload_json)
             payload_step_params = data.get("step_params", {})
+
+            # ParseInputStep is a CORE step (is_plugin=False), so it isn't
+            # covered by the plugin loop below — resolve it explicitly. Without
+            # this, raw values from the UI (e.g. enum string labels for
+            # inpainting_fill, float strings from number inputs) get stored
+            # verbatim and then echoed back by api_get_workflow, immediately
+            # reverting the user's edit.
+            if 'parse_input' in payload_step_params:
+                resolved = ParseInputStep.resolve_params(payload_step_params['parse_input'])
+                if 'parse_input' not in canvas_state.step_params:
+                    canvas_state.step_params['parse_input'] = {}
+                canvas_state.step_params['parse_input'].update(resolved)
+
             plugins = [cls for cls in GenerationStep.__subclasses__() if getattr(cls, 'is_plugin', False)]
-            
+
             for plugin_cls in plugins:
                 if plugin_cls.id in payload_step_params:
                     resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
                     if plugin_cls.id not in canvas_state.step_params:
                         canvas_state.step_params[plugin_cls.id] = {}
                     canvas_state.step_params[plugin_cls.id].update(resolved)
-                    
+
         except Exception as e:
             print(f"[Infinite Canvas] Error updating workflow: {e}")
-            
+
     return api_get_workflow()

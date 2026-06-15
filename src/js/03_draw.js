@@ -15,8 +15,8 @@
         // Sync CSS Background Grid (Photoshop style)
         const container = document.getElementById('ic-container');
         if (container) {
-            const bgSize = 16 * scale;
-            const halfSize = 8 * scale;
+            const bgSize = 32 * scale;
+            const halfSize = 16 * scale;
             container.style.backgroundSize = `${bgSize}px ${bgSize}px`;
             container.style.backgroundPosition = `${offsetX}px ${offsetY}px, ${offsetX + halfSize}px ${offsetY + halfSize}px`;
         }

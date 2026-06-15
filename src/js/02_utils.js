@@ -173,13 +173,51 @@
     }
     
     function getGenSize() {
-        const wEl = document.querySelector('#ic_gen_width input[type="number"]');
-        const hEl = document.querySelector('#ic_gen_height input[type="number"]');
+        // Width/Height are now ParseInputStep params (rendered by 07_workflow.js
+        // as .ic-node-param number inputs under data-node-id="parse_input").
+        const wEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_width"]');
+        const hEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_height"]');
         return {
             w: wEl ? parseFloat(wEl.value) : 1024,
             h: hEl ? parseFloat(hEl.value) : 1024
         };
     }
+
+    // ParseInputStep's width/height inputs are rendered dynamically by
+    // 07_workflow.js, so use a delegated listener on document to keep the blue
+    // source box + its aspect ratio in sync as the user types — this replaces
+    // the per-input bindings the old 09_ui.js controls used to install.
+    //
+    // IMPORTANT: each numeric param is a <input type="range"> + <input
+    // type="number" class="ic-node-param"> pair. The range slider does NOT
+    // carry .ic-node-param (only the number input does), so we must detect it
+    // via its sibling number input — otherwise dragging the slider updates the
+    // number but never redraws the blue box until focus leaves the panel.
+    document.addEventListener('input', (e) => {
+        const el = e.target;
+        if (!el) return;
+
+        // Resolve which param this is, handling both the number input (has
+        // data-* attrs) and its sibling range slider (no data-* attrs).
+        let paramName = null;
+        if (el.classList && el.classList.contains('ic-node-param')) {
+            if (el.getAttribute('data-node-id') !== 'parse_input') return;
+            paramName = el.getAttribute('data-param-name');
+        } else if (el.type === 'range') {
+            // Range slider → its number sibling is nextElementSibling.
+            const num = el.nextElementSibling;
+            if (!num || !num.classList || !num.classList.contains('ic-node-param')) return;
+            if (num.getAttribute('data-node-id') !== 'parse_input') return;
+            paramName = num.getAttribute('data-param-name');
+        } else {
+            return;
+        }
+
+        if (paramName === 'gen_width' || paramName === 'gen_height') {
+            if (typeof enforceSourceRatio === 'function') enforceSourceRatio();
+            if (typeof draw === 'function') draw();
+        }
+    });
     
     function enforceSourceRatio() {
         // Suppress during project load to prevent Gradio's async slider

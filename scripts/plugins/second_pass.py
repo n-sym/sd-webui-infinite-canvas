@@ -7,12 +7,16 @@ class SecondPassStep(GenerationStep):
     name = "Hires Fix"
     is_plugin = True
     sort_index = 102
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["SdProcessing", "GeneratedImage"], "out": ["SdProcessing", "GeneratedImage"]}
     
     @classmethod
     def get_params(cls):
         from modules import shared
         return [
-            {"name": "enabled", "label": "Enable", "type": "bool", "default": False},
+            {"name": "enabled", "label": "Enable", "type": "bool", "default": False, "is_generation_param": False},
             {"name": "upscaler", "label": "Upscaler", "type": "enum", "choices": [x.name for x in shared.sd_upscalers], "default": shared.sd_upscalers[0].name if shared.sd_upscalers else "None"},
             {"name": "scale_factor", "label": "Scale Factor", "type": "float", "default": 1.5, "min": 1.0, "max": 4.0, "step": 0.05},
             {"name": "overlap", "label": "Tile Overlap", "type": "int", "default": 64, "min": 0, "max": 256, "step": 16},
@@ -24,14 +28,17 @@ class SecondPassStep(GenerationStep):
     @classmethod
     def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
         from modules import shared
+        def _get(k, default):
+            v = raw_params.get(k)
+            return default if v is None else v
         return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "upscaler": str(raw_params.get("upscaler", shared.sd_upscalers[0].name if shared.sd_upscalers else "None")),
-            "scale_factor": float(raw_params.get("scale_factor", 1.5)),
-            "overlap": int(raw_params.get("overlap", 64)),
-            "tile_batch_size": int(raw_params.get("tile_batch_size", 1)),
-            "steps": int(raw_params.get("steps", 15)),
-            "denoising_strength": float(raw_params.get("denoising_strength", 0.35))
+            "enabled": bool(_get("enabled", False)),
+            "upscaler": str(_get("upscaler", shared.sd_upscalers[0].name if shared.sd_upscalers else "None")),
+            "scale_factor": float(_get("scale_factor", 1.5)),
+            "overlap": int(_get("overlap", 64)),
+            "tile_batch_size": int(_get("tile_batch_size", 1)),
+            "steps": int(_get("steps", 15)),
+            "denoising_strength": float(_get("denoising_strength", 0.35))
         }
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:

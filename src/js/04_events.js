@@ -1,41 +1,5 @@
     
-    // Bind Mask Tool buttons
-    setTimeout(() => {
-        const tools = ['rect', 'brush', 'ellipse', 'eraser'];
-        tools.forEach(t => {
-            const btn = document.getElementById('ic_tool_' + t);
-            if (btn) {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    window.ic_current_tool = t.charAt(0).toUpperCase() + t.slice(1);
-                    
-                    // Update classes
-                    tools.forEach(t2 => {
-                        const b2 = document.getElementById('ic_tool_' + t2);
-                        if (b2) {
-                            b2.classList.remove('primary');
-                            b2.classList.add('secondary');
-                        }
-                    });
-                    btn.classList.remove('secondary');
-                    btn.classList.add('primary');
-                });
-            }
-        });
-    }, 500);
-
-    // Listen to slider changes instead of polling
-    setTimeout(() => {
-        const wEl = document.querySelector('#ic_gen_width input[type="number"]');
-        const hEl = document.querySelector('#ic_gen_height input[type="number"]');
-        if (wEl) wEl.addEventListener('input', () => draw());
-        if (hEl) hEl.addEventListener('input', () => draw());
-        if (wEl) wEl.addEventListener('change', () => draw());
-        if (hEl) hEl.addEventListener('change', () => draw());
-        
-        const overlayCb = document.querySelector('#ic_show_overlay input[type="checkbox"]');
-        if (overlayCb) overlayCb.addEventListener('change', () => draw());
-    }, 1000);
+    // Cleaned up old Gradio listeners
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     
     const floatingToolbar = document.getElementById('ic-floating-toolbar');
@@ -151,15 +115,15 @@
                     dilation: dilationValue
                 };
                 
-                const payloadInput = document.getElementById('ic_sam_payload_input');
-                if (payloadInput) {
-                    const textarea = payloadInput.querySelector('textarea');
-                    if (textarea) {
-                        textarea.value = JSON.stringify(payload);
-                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                        setTimeout(() => document.getElementById('ic_sam_predict_btn')?.click(), 50);
-                    }
-                }
+                fetch('/infinite-canvas-api/sam_predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payload_json: JSON.stringify(payload) })
+                }).then(res => res.json())
+                  .then(data => {
+                      if (window.ic_handle_payload) window.ic_handle_payload(data);
+                  })
+                  .catch(e => console.error("SAM failed", e));
             } else if (tool === 'Rect') {
                 isDrawingRect = true;
                 currentStroke = {type: 'rect', x: startX, y: startY, w: 0, h: 0};

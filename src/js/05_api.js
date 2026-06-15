@@ -1,120 +1,153 @@
-    
-    const generateBtn = document.getElementById('ic_generate');
-    if (generateBtn) {
-        generateBtn.addEventListener('click', () => {
-            calculateTargetRectFromMask();
-            let maskBase64 = "";
-            if (targetRect.w > 0 && targetRect.h > 0) {
-                const maskC = document.createElement('canvas');
-                maskC.width = targetRect.w;
-                maskC.height = targetRect.h;
-                const mctx = maskC.getContext('2d');
-                mctx.imageSmoothingEnabled = false;
-                mctx.fillStyle = 'black';
-                mctx.fillRect(0, 0, maskC.width, maskC.height);
-                
-                const scaleX = maskDataCanvas.width / sourceRect.w;
-                const scaleY = maskDataCanvas.height / sourceRect.h;
-                
-                const srcX = (targetRect.x - sourceRect.x) * scaleX;
-                const srcY = (targetRect.y - sourceRect.y) * scaleY;
-                const srcW = targetRect.w * scaleX;
-                const srcH = targetRect.h * scaleY;
-                
-                mctx.drawImage(
-                    maskDataCanvas,
-                    srcX, srcY, srcW, srcH,
-                    0, 0, targetRect.w, targetRect.h
-                );
-                maskBase64 = maskC.toDataURL('image/png');
+    window.ic_trigger_generate = async function() {
+        calculateTargetRectFromMask();
+        let maskBase64 = "";
+        if (targetRect.w > 0 && targetRect.h > 0) {
+            const maskC = document.createElement('canvas');
+            maskC.width = targetRect.w;
+            maskC.height = targetRect.h;
+            const mctx = maskC.getContext('2d');
+            mctx.imageSmoothingEnabled = false;
+            mctx.fillStyle = 'black';
+            mctx.fillRect(0, 0, maskC.width, maskC.height);
+
+            const scaleX = maskDataCanvas.width / sourceRect.w;
+            const scaleY = maskDataCanvas.height / sourceRect.h;
+
+            const srcX = (targetRect.x - sourceRect.x) * scaleX;
+            const srcY = (targetRect.y - sourceRect.y) * scaleY;
+            const srcW = targetRect.w * scaleX;
+            const srcH = targetRect.h * scaleY;
+
+            mctx.drawImage(
+                maskDataCanvas,
+                srcX, srcY, srcW, srcH,
+                0, 0, targetRect.w, targetRect.h
+            );
+            maskBase64 = maskC.toDataURL('image/png');
+        }
+
+        // All tunable params (parse_input's prompt/steps/cfg/... + every
+        // plugin's params) are rendered as .ic-node-param inputs by
+        // 07_workflow.js and scraped here into step_params. The backend's
+        // ParseInputStep resolves step_params['parse_input'] onto ctx.
+        const stepParams = {};
+        document.querySelectorAll('.ic-node-param').forEach(input => {
+            const nodeId = input.getAttribute('data-node-id');
+            const paramName = input.getAttribute('data-param-name');
+            if (!nodeId || !paramName) return;
+
+            let val;
+            if (input.type === 'checkbox') {
+                val = input.checked;
+            } else if (input.type === 'range' || input.type === 'number') {
+                val = parseFloat(input.value);
+            } else {
+                val = input.value;
             }
 
-            const stepParams = {};
-            document.querySelectorAll('.ic-node-param').forEach(input => {
-                const nodeId = input.getAttribute('data-node-id');
-                const paramName = input.getAttribute('data-param-name');
-                if (!nodeId || !paramName) return;
-                
-                let val;
-                if (input.type === 'checkbox') {
-                    val = input.checked;
-                } else if (input.type === 'range' || input.type === 'number') {
-                    val = parseFloat(input.value);
-                } else {
-                    val = input.value;
-                }
-                
-                if (!stepParams[nodeId]) stepParams[nodeId] = {};
-                stepParams[nodeId][paramName] = val;
-            });
-
-            const payload = {
-                target_rect: targetRect,
-                source_rect: sourceRect,
-                mask_base64: maskBase64,
-                step_params: stepParams
-            };
-            
-            const payloadInput = document.querySelector('#ic_payload textarea');
-            if (payloadInput) {
-                payloadInput.value = JSON.stringify(payload);
-                payloadInput.dispatchEvent(new Event('input', { bubbles: true }));
-                
-                window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7) + ")";
-                if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
-                let dummyProgressContainer = document.getElementById('ic-dummy-progress');
-                if (!dummyProgressContainer) {
-                    dummyProgressContainer = document.createElement('div');
-                    dummyProgressContainer.id = 'ic-dummy-progress';
-                    dummyProgressContainer.style.display = 'none';
-                    document.body.appendChild(dummyProgressContainer);
-                    
-                    let dummyInner = document.createElement('div');
-                    dummyInner.id = 'ic-dummy-inner';
-                    dummyProgressContainer.appendChild(dummyInner);
-                }
-
-                if (typeof requestProgress === 'function') {
-                    requestProgress(
-                        window.ic_current_task_id,
-                        document.getElementById("ic-dummy-inner"),
-                        null,
-                        function() {
-                            window.ic_current_task_id = null;
-                            const toast = document.getElementById('ic-progress-toast');
-                            if (toast && !window.exist_pending_generation) toast.style.display = 'none';
-                            if (typeof showSubmitButtons === 'function' && !window.exist_pending_generation) showSubmitButtons("ic", true);
-                        }
-                    );
-                }
-                setTimeout(() => document.getElementById('ic_trigger')?.click(), 100);
-            }
+            if (!stepParams[nodeId]) stepParams[nodeId] = {};
+            stepParams[nodeId][paramName] = val;
         });
-    }
-    
-    const triggerBtn = document.getElementById('ic_trigger');
+
+        const payload = {
+            target_rect: targetRect,
+            source_rect: sourceRect,
+            mask_base64: maskBase64,
+            step_params: stepParams
+        };
+
+        window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7) + ")";
+
+        const reqData = {
+            id_task: window.ic_current_task_id,
+            payload_json: JSON.stringify(payload)
+        };
+
+        const genBtn = document.getElementById('ic-sidebar-generate-btn');
+        const intBtn = document.getElementById('ic-sidebar-interrupt-btn');
+        if (genBtn) genBtn.style.display = 'none';
+        if (intBtn) intBtn.style.display = 'block';
+
+        try {
+            const res = await fetch('/infinite-canvas-api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reqData)
+            });
+            const data = await res.json();
+            
+            const toast = document.getElementById('ic-progress-toast');
+            if (toast && !window.exist_pending_generation) toast.style.display = 'none';
+            
+            if (data.error) {
+                console.error("Generate error:", data.error);
+                alert("Error: " + data.error);
+                return;
+            }
+            
+            if (data.type === "generation_done" && data.tiles) {
+                // Mock behavior for handling returned payload as original frontend did
+                // Since the UI used Gradio's internal state mechanism, we must call the global payload handler.
+                if (window.ic_handle_payload) {
+                    window.ic_handle_payload(data);
+                }
+            } else if (data.type === "payload" && data.content) {
+                if (window.ic_handle_payload) {
+                    window.ic_handle_payload(JSON.parse(data.content));
+                }
+            } else {
+                if (window.ic_handle_payload) {
+                    window.ic_handle_payload(data);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to generate:", e);
+            const toast = document.getElementById('ic-progress-toast');
+            if (toast) toast.style.display = 'none';
+            alert("Failed to generate: " + e.message);
+        } finally {
+            // Generate/Interrupt are mutually exclusive. The generation has
+            // returned, but it may have PAUSED on a dynamic_dialog (prompt
+            // review / firstpass review) and still be alive server-side — in
+            // that case keep Interrupt available so the user can abort the
+            // suspended session, and DON'T clear the task id / re-enable
+            // Generate (otherwise a second Generate could fire concurrently).
+            if (window.exist_pending_generation) {
+                if (genBtn) genBtn.style.display = 'none';
+                if (intBtn) intBtn.style.display = 'block';
+                // Leave ic_current_task_id set so the sidebar Generate guard
+                // (line ~155 in 09_ui.js) blocks re-entry while paused.
+            } else {
+                window.ic_current_task_id = null;
+                if (genBtn) genBtn.style.display = 'block';
+                if (intBtn) intBtn.style.display = 'none';
+            }
+            // If the request resolved (apply/discard/done/error) before the
+            // server's next inactive progress frame arrived, make sure the
+            // progress and cancel toasts don't strand open.
+            if (typeof icHideToast === 'function') {
+                icHideToast('ic-progress-toast');
+                icHideToast('ic-cancel-toast');
+            }
+            if (!window.exist_pending_generation) {
+                window.icCancelling = false;
+            }
+        }
+    };
     
     // Project Management Modal Logic
     const projectsBtn = document.getElementById('ic_float_projects');
     const projectsModal = document.getElementById('ic-projects-modal');
     const projectsList = document.getElementById('ic-projects-list');
-    const getProjectsBtn = document.getElementById('ic_get_projects_btn');
-    const projectsJsonOutput = document.getElementById('ic_projects_json_output');
     
     if (projectsBtn && projectsModal) {
-        projectsBtn.addEventListener('click', () => {
+        projectsBtn.addEventListener('click', async () => {
             projectsModal.style.display = 'flex';
-            if (getProjectsBtn) getProjectsBtn.click();
-        });
-    }
-    
-    if (projectsJsonOutput) {
-        const observer = new MutationObserver(() => {
-            const textarea = projectsJsonOutput.querySelector('textarea');
-            if (!textarea || !textarea.value) return;
+            projectsList.innerHTML = `<div style="padding: 30px 20px; text-align: center; color: #888; font-size: 14px;">${typeof t === 'function' ? t('Loading projects...') : 'Loading projects...'}</div>`;
             try {
-                const projects = JSON.parse(textarea.value);
-                textarea.value = "";
+                const res = await fetch('/infinite-canvas-api/projects/list');
+                const projects = await res.json();
+                
                 projectsList.innerHTML = '';
                 if (projects.length === 0) {
                     projectsList.innerHTML = `<div style="padding: 30px 20px; text-align: center; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-size: 14px;">${typeof t === 'function' ? t('No projects found.') : 'No projects found.'}</div>`;
@@ -141,34 +174,50 @@
                     nameSpan.style.fontWeight = '700';
                     nameSpan.innerText = p.name;
                     
-                    item.addEventListener('click', () => {
+                    item.addEventListener('click', async () => {
                         if (window.ic_is_loading_or_saving) return;
                         window.lockProjectUI();
-                        window.ic_pending_autosave_check = true;
                         
-                        const nameInput = document.querySelector('#ic_project_name_input textarea') || document.querySelector('#ic_project_name_input input');
-                        if (nameInput) {
-                            nameInput.value = p.name;
-                            if (typeof updateInput === 'function') updateInput(nameInput);
-                            else nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        const visualNameInput = document.getElementById('ic-projects-name-input');
+                        if (visualNameInput) visualNameInput.value = p.name;
+                        
+                        projectsModal.style.display = 'none';
+                        
+                        try {
+                            const chkRes = await fetch('/infinite-canvas-api/projects/check_autosave', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ project_name: p.name })
+                            });
+                            const chkData = await chkRes.json();
                             
-                            const visualNameInput = document.getElementById('ic-projects-name-input');
-                            if (visualNameInput) visualNameInput.value = p.name;
-                            
-                            // CLEAR autosave output DOM and Gradio state safely to prevent premature firing
-                            const autosaveCheckOutput = document.getElementById('ic_check_autosave_output');
-                            if (autosaveCheckOutput) {
-                                const outArea = autosaveCheckOutput.querySelector('textarea') || autosaveCheckOutput.querySelector('input');
-                                if (outArea) {
-                                    outArea.value = "";
-                                    if (typeof updateInput === 'function') updateInput(outArea);
-                                    else outArea.dispatchEvent(new Event('input', { bubbles: true }));
+                            const doLoad = async (recover) => {
+                                try {
+                                    const loadRes = await fetch('/infinite-canvas-api/projects/load', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ project_name: p.name, recover_autosave: recover })
+                                    });
+                                    const loadData = await loadRes.json();
+                                    if (window.ic_handle_payload) window.ic_handle_payload(loadData);
+                                } catch (e) {
+                                    console.error("Load project error", e);
+                                } finally {
+                                    if (window.unlockProjectUI) window.unlockProjectUI();
                                 }
-                            }
-                            const checkBtn = document.getElementById('ic_check_autosave_hidden_btn');
-                            if (checkBtn) checkBtn.click();
+                            };
                             
-                            projectsModal.style.display = 'none';
+                            if (chkData.has_newer) {
+                                const recoverModal = document.getElementById('ic-recover-modal');
+                                if (recoverModal) recoverModal.style.display = 'flex';
+                                
+                                window._ic_recover_callback = doLoad;
+                            } else {
+                                await doLoad(false);
+                            }
+                        } catch (e) {
+                            console.error("Check autosave error", e);
+                            if (window.unlockProjectUI) window.unlockProjectUI();
                         }
                     });
                     
@@ -176,42 +225,10 @@
                     projectsList.appendChild(item);
                 });
             } catch (e) {
-                console.error("Error parsing projects JSON", e);
+                console.error("Error fetching projects", e);
+                projectsList.innerHTML = `<div style="padding: 30px 20px; text-align: center; color: red; font-size: 14px;">Error loading projects.</div>`;
             }
         });
-        observer.observe(projectsJsonOutput, { childList: true, subtree: true, attributes: true, characterData: true });
-    }
-    
-    // Autosave check and recovery logic
-    const autosaveCheckOutput = document.getElementById('ic_check_autosave_output');
-    if (autosaveCheckOutput) {
-        const observer = new MutationObserver(() => {
-            const textarea = autosaveCheckOutput.querySelector('textarea') || autosaveCheckOutput.querySelector('input');
-            if (!textarea || !textarea.value) return;
-            if (!window.ic_pending_autosave_check) return;
-            window.ic_pending_autosave_check = false;
-
-            try {
-                const data = JSON.parse(textarea.value);
-                const recoverModal = document.getElementById('ic-recover-modal');
-                if (data.has_newer) {
-                    if (recoverModal) recoverModal.style.display = 'flex';
-                } else {
-                    const recoverInput = document.querySelector('#ic_recover_autosave_input input[type="checkbox"]');
-                    if (recoverInput) {
-                        recoverInput.checked = false;
-                        recoverInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    setTimeout(() => {
-                        const hiddenLoadBtn = document.getElementById('ic_load_project_hidden_btn');
-                        if (hiddenLoadBtn) hiddenLoadBtn.click();
-                    }, 100);
-                }
-            } catch (e) {
-                console.error("Error parsing autosave check output", e);
-            } 
-        });
-        observer.observe(autosaveCheckOutput, { childList: true, subtree: true, attributes: true, characterData: true });
     }
     
     const setupRecoverBtn = (btnId, doRecover) => {
@@ -221,15 +238,10 @@
                 const recoverModal = document.getElementById('ic-recover-modal');
                 if (recoverModal) recoverModal.style.display = 'none';
                 
-                const recoverInput = document.querySelector('#ic_recover_autosave_input input[type="checkbox"]');
-                if (recoverInput) {
-                    recoverInput.checked = doRecover;
-                    recoverInput.dispatchEvent(new Event('change', { bubbles: true }));
+                if (window._ic_recover_callback) {
+                    window._ic_recover_callback(doRecover);
+                    window._ic_recover_callback = null;
                 }
-                setTimeout(() => {
-                    const hiddenLoadBtn = document.getElementById('ic_load_project_hidden_btn');
-                    if (hiddenLoadBtn) hiddenLoadBtn.click();
-                }, 100);
             });
         }
     };
@@ -251,38 +263,45 @@
     
     const saveProjectBtn = document.getElementById('ic-projects-save-btn');
     if (saveProjectBtn) {
-        saveProjectBtn.addEventListener('click', () => {
+        saveProjectBtn.addEventListener('click', async () => {
             if (window.ic_is_loading_or_saving) return;
             window.lockProjectUI();
-            
+
             const nameField = document.getElementById('ic-projects-name-input');
             const targetName = nameField ? nameField.value : 'project';
-            
-            const nameInput = document.querySelector('#ic_project_name_input textarea') || document.querySelector('#ic_project_name_input input');
-            if (nameInput) {
-                nameInput.value = targetName;
-                if (typeof updateInput === 'function') updateInput(nameInput);
-                else nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            
+
             const payload = {
                 viewport: {
                     scale: scale,
                     offsetX: offsetX,
                     offsetY: offsetY,
-                    sourceRect: sourceRect
+                    sourceRect: sourceRect,
+                    targetRect: targetRect
                 },
                 mask: maskDataCanvas.toDataURL('image/png')
             };
-            const payloadInput = document.querySelector('#ic_payload textarea') || document.querySelector('#ic_payload input');
-            if (payloadInput) {
-                if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Saving project...") : "Saving project...", 0, 'white', 'ic-save-toast');
-                payloadInput.value = JSON.stringify(payload);
-                if (typeof updateInput === 'function') updateInput(payloadInput);
-                else payloadInput.dispatchEvent(new Event('input', { bubbles: true }));
-                const hiddenSaveBtn = document.getElementById('ic_save_project_hidden_btn');
-                if (hiddenSaveBtn) hiddenSaveBtn.click();
+
+            // The "Saving..."/"Saved!" toasts are now driven by WS save:saving /
+            // save:done frames from core_logic.api_save_project. We only handle
+            // the request/response here and clean up on network failure.
+            try {
+                const res = await fetch('/infinite-canvas-api/projects/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_name: targetName,
+                        payload_json: JSON.stringify(payload)
+                    })
+                });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Save project error", e);
+                if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+            } finally {
+                if (window.unlockProjectUI) window.unlockProjectUI();
             }
+
             projectsModal.style.display = 'none';
         });
     }
@@ -291,46 +310,71 @@
     if (importBtn) {
         importBtn.addEventListener('click', () => {
             if (window.ic_is_loading_or_saving) return;
-            const hiddenImport = document.querySelector('#ic_import_file input[type="file"]');
-            if (hiddenImport) hiddenImport.click();
+            
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.infcanvas';
+            fileInput.style.display = 'none';
+            document.body.appendChild(fileInput);
+            
+            fileInput.addEventListener('change', async (e) => {
+                if (!e.target.files || e.target.files.length === 0) return;
+                const file = e.target.files[0];
+                
+                window.lockProjectUI();
+                if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Importing project...") : "Importing project...", 0, 'white', 'ic-save-toast');
+                
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const base64data = event.target.result;
+                    try {
+                        const res = await fetch('/infinite-canvas-api/projects/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                project_b64: base64data,
+                                filename: file.name
+                            })
+                        });
+                        const data = await res.json();
+                        if (window.ic_handle_payload) window.ic_handle_payload(data);
+                    } catch (err) {
+                        console.error("Import failed:", err);
+                    } finally {
+                        if (window.unlockProjectUI) window.unlockProjectUI();
+                        document.body.removeChild(fileInput);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+            
+            fileInput.click();
             projectsModal.style.display = 'none';
         });
     }
     
     const autosaveBtn = document.getElementById('ic_float_autosave');
     if (autosaveBtn) {
-        autosaveBtn.addEventListener('click', () => {
-            const hiddenAutosave = document.querySelector('#ic_autosave_enable input[type="checkbox"]');
-            if (hiddenAutosave) {
-                hiddenAutosave.checked = !hiddenAutosave.checked;
-                hiddenAutosave.dispatchEvent(new Event('change', { bubbles: true }));
-                if (hiddenAutosave.checked) {
-                    autosaveBtn.classList.add('primary');
-                    if (window.icStartAutosavePoller) window.icStartAutosavePoller();
-                } else {
-                    autosaveBtn.classList.remove('primary');
-                    if (window.autosavePoller) {
-                        clearInterval(window.autosavePoller);
-                        window.autosavePoller = null;
-                    }
-                }
-            }
-        });
-        
-        // Sync initial state
-        setTimeout(() => {
-            const hiddenAutosave = document.querySelector('#ic_autosave_enable input[type="checkbox"]');
-            if (hiddenAutosave && hiddenAutosave.checked) {
+        autosaveBtn.addEventListener('click', async () => {
+            window.ic_autosave_enabled = !window.ic_autosave_enabled;
+            if (window.ic_autosave_enabled) {
                 autosaveBtn.classList.add('primary');
             } else {
                 autosaveBtn.classList.remove('primary');
             }
-        }, 1000);
+            try {
+                await fetch('/infinite-canvas-api/projects/set_autosave', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: window.ic_autosave_enabled })
+                });
+            } catch(e) { console.error("Set autosave failed", e); }
+        });
     }
     
 
 
-    if (!triggerBtn) return;
+
     
     const guideBtn = document.getElementById('ic_guide_btn');
     if (guideBtn) {
@@ -360,60 +404,176 @@
         });
     }
 
-    function _initICAutosave() {
-        const statusBox = document.getElementById('ic_autosave_status_box');
-        if (!statusBox) {
-            setTimeout(_initICAutosave, 500);
-            return;
-        }
-        
-        if (!window.icAutosaveInitialized) {
-            window.icAutosaveInitialized = true;
-            
-            const observer = new MutationObserver(() => {
-                const statusInput = statusBox.querySelector('input') || statusBox.querySelector('textarea');
-                if (statusInput) {
-                    const val = statusInput.value;
-                    if (val === 'saving') {
-                        if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Autosaving...") : "Autosaving...", 0, 'white', 'ic-autosave-toast');
-                    } else if (val === 'done') {
+    window.icStartAutosavePoller = function() {
+        // Disabled background poller to prevent repeated autosave dialogs
+    };
+    
+    // Setup WebSocket for backend-to-frontend pushes.
+    // Replaces: the old autosave MutationObserver poll, the 500ms progress
+    // poll (now driven by server-pushed frames), and the front-end-only save
+    // toast. Server pushes a heartbeat every ~25s so the socket stays alive
+    // through proxies; a liveness watchdog falls back to polling if it stops.
+    function setupWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/infinite-canvas-api/ws`;
+        let ws = new WebSocket(wsUrl);
+        window.icWS = ws;
+
+        // Liveness watchdog: we expect a heartbeat (or any frame) at least every
+        // ~35s. If we go stale, mark the WS dead so 08_progress.js resumes its
+        // polling fallback, and force a reconnect.
+        const HEARTBEAT_TIMEOUT_MS = 35000;
+        if (window.icHeartbeatWatchdog) clearInterval(window.icHeartbeatWatchdog);
+        window.icWSLastFrameTs = Date.now();
+        window.icWSAlive = false; // not alive until first frame confirms round-trip
+        window.icHeartbeatWatchdog = setInterval(() => {
+            if (Date.now() - window.icWSLastFrameTs > HEARTBEAT_TIMEOUT_MS) {
+                if (window.icWSAlive) {
+                    console.warn("[IC] WS heartbeat stale — falling back to polling and forcing reconnect.");
+                    window.icWSAlive = false;
+                    try { ws.close(); } catch (e) {}
+                }
+            }
+        }, 5000);
+
+        ws.onopen = () => {
+            // We don't declare alive until the first frame arrives — open alone
+            // doesn't prove the pushers are running on the server side.
+        };
+
+        ws.onmessage = (event) => {
+            window.icWSLastFrameTs = Date.now();
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                console.error("[IC] WS message parse error", e);
+                return;
+            }
+
+            // ---- DEBUG: one-shot verbose log per distinct message kind ----
+            // High-frequency frames (heartbeat, progress) log only the FIRST
+            // occurrence so the console doesn't flood. Event frames (autosave,
+            // save, toast, or anything unknown) log EVERY time, since those are
+            // rare and exactly what you want to see arrive. Keyed by type +
+            // status so e.g. autosave:saving and autosave:done both show up.
+            try {
+                if (!window.__icWSLogged) window.__icWSLogged = new Set();
+                const key = data.type + (data.status !== undefined ? ':' + data.status : '');
+                const isHighFreq = (data.type === 'heartbeat' || data.type === 'progress');
+                if (isHighFreq) {
+                    if (!window.__icWSLogged.has(key)) {
+                        window.__icWSLogged.add(key);
+                        console.log(`%c[IC WS] first ${data.type} frame arrived%o`, 'color:#4CAF50', data);
+                    }
+                } else {
+                    // Always log event frames (dedupe identical repeats within 2s only,
+                    // so a stuck sender still shows but doesn't spam).
+                    const now = Date.now();
+                    const lastKey = '__last_' + key;
+                    if (!window[lastKey] || now - window[lastKey] > 2000) {
+                        window[lastKey] = now;
+                        console.log(`%c[IC WS] ${key}%o`, 'color:#2196F3', data);
+                    }
+                }
+            } catch (e) {}
+
+            switch (data.type) {
+                case 'heartbeat':
+                    // Server is keeping the socket warm. Mark alive so the polling
+                    // fallback in 08_progress.js can go dormant.
+                    window.icWSAlive = true;
+                    break;
+
+                case 'progress':
+                    // Server-pushed progress frame (replaces the 500ms poll).
+                    window.icWSAlive = true;
+                    if (window.icRenderProgressFrame) window.icRenderProgressFrame(data);
+                    break;
+
+                case 'autosave':
+                    // {status: 'saving' | 'done'}
+                    window.icWSAlive = true;
+                    if (data.status === 'saving') {
+                        const toast = icGetOrCreateToast('ic-autosave-toast');
+                        toast.querySelector('.ic-toast-text').innerText = t("Autosaving...");
+                        toast.querySelector('.ic-toast-pct').innerText = '';
+                        const bar = toast.querySelector('.ic-toast-bar');
+                        bar.classList.add('ic-toast-bar-indeterminate');
+                        bar.style.width = '100%';
+                        bar.parentNode.style.display = 'block';
+                        icUpdateToastThemeForElement(toast, 'white');
+                        icShowToast('ic-autosave-toast');
+                    } else { // 'done'
+                        const toast = document.getElementById('ic-autosave-toast');
+                        if (toast) {
+                            toast.querySelector('.ic-toast-text').innerText = t("Autosaved");
+                            toast.querySelector('.ic-toast-pct').innerText = '';
+                            const bar = toast.querySelector('.ic-toast-bar');
+                            bar.classList.remove('ic-toast-bar-indeterminate');
+                            bar.style.width = '100%';
+                            icUpdateToastThemeForElement(toast, 'white');
+                            icShowToast('ic-autosave-toast');
+                            if (window.icAutosaveToastTimeout) clearTimeout(window.icAutosaveToastTimeout);
+                            window.icAutosaveToastTimeout = setTimeout(() => icHideToast('ic-autosave-toast'), 1800);
+                        }
+                    }
+                    break;
+
+                case 'save':
+                    // {status: 'saving' | 'done', name: ...}
+                    window.icWSAlive = true;
+                    if (data.status === 'saving') {
                         if (window.icShowCustomToast) {
-                            window.icShowCustomToast(typeof t === 'function' ? t("Autosaved successfully!") : "Autosaved successfully!", 3000, 'white', 'ic-autosave-toast');
-                            let toast = document.getElementById('ic-autosave-toast');
-                            if (toast) {
-                                toast.querySelector('.ic-toast-bar').parentNode.style.display = 'none';
-                                toast.children[0].style.marginBottom = '0';
+                            window.icShowCustomToast(t("Saving project..."), 0, 'white', 'ic-save-toast');
+                        }
+                    } else { // 'done'
+                        if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+                        if (window.icShowCustomToast) {
+                            window.icShowCustomToast(t("Project saved!"), 2500, 'white', 'ic-save-success-toast');
+                            const sToast = document.getElementById('ic-save-success-toast');
+                            if (sToast) {
+                                const bar = sToast.querySelector('.ic-toast-bar');
+                                if (bar && bar.parentNode) bar.parentNode.style.display = 'none';
+                                if (sToast.children[0]) sToast.children[0].style.marginBottom = '0';
                             }
                         }
                     }
-                }
-            });
-            observer.observe(statusBox, { childList: true, subtree: true, attributes: true, characterData: true });
-        }
-    }
-    _initICAutosave();
+                    break;
 
-    window.icStartAutosavePoller = function() {
-        if (!window.autosavePoller) {
-            window.autosavePoller = setInterval(() => {
-                const hiddenAutosave = document.querySelector('#ic_autosave_enable input[type="checkbox"]');
-                if (hiddenAutosave && hiddenAutosave.checked) {
-                    const btn = document.getElementById('ic_check_autosave_btn');
-                    if (btn) btn.click();
-                } else {
-                    clearInterval(window.autosavePoller);
-                    window.autosavePoller = null;
-                }
-            }, 2000);
-        }
-    };
+                case 'toast':
+                    // Legacy / generic toast (kept for any other backend pushes).
+                    window.icWSAlive = true;
+                    if (window.icShowCustomToast) {
+                        window.icShowCustomToast(
+                            typeof t === 'function' ? t(data.message) : data.message,
+                            data.duration || 2000,
+                            'white',
+                            'ic-autosave-ws-toast'
+                        );
+                    }
+                    break;
+            }
+        };
+
+        ws.onerror = () => {
+            // onclose will fire next; we reconnect there.
+        };
+
+        ws.onclose = () => {
+            window.icWSAlive = false;
+            setTimeout(setupWebSocket, 3000); // Reconnect after 3 seconds
+        };
+    }
+
+    setupWebSocket();
     
-    // Start it automatically on load if checked
+    // Start it automatically on load if enabled (defaults to true)
     setTimeout(() => {
-        const hiddenAutosave = document.querySelector('#ic_autosave_enable input[type="checkbox"]');
-        if (hiddenAutosave && hiddenAutosave.checked) {
-            window.icStartAutosavePoller();
-        }
+        window.ic_autosave_enabled = true;
+        const autosaveBtn = document.getElementById('ic_float_autosave');
+        if (autosaveBtn) autosaveBtn.classList.add('primary');
+        window.icStartAutosavePoller();
     }, 2000);
 
     const overlayBtn = document.getElementById('ic_show_overlay_btn');
@@ -444,7 +604,7 @@
         autoScaleBtn.addEventListener('click', () => {
             window.ic_auto_scale_state = !window.ic_auto_scale_state;
             
-            const autoScaleCb = document.querySelector('#ic_auto_scale input[type="checkbox"]');
+            const autoScaleCb = document.querySelector('input.ic-node-param[data-node-id="parse_input"][data-param-name="auto_scale"]');
             if(autoScaleCb && autoScaleCb.checked !== window.ic_auto_scale_state) autoScaleCb.click();
             
             if (window.ic_auto_scale_state) {

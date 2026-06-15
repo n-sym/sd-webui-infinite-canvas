@@ -68,8 +68,74 @@ def pause_generation_and_show_dynamic_dialog(ctx: GenerationCtx, title: str, htm
 
 class ParseInputStep(GenerationStep):
     id = "parse_input"
-    name = "Core: Parse Input"
+    name = "SD-Style Input"
     sort_index = 0
+
+    @classmethod
+    def type_signature(cls):
+        return {"in": ["SdStyleInput"], "out": ["Prompt", "SamplerConfig", "Resolution", "InputImage", "InputMask"]}
+
+    @classmethod
+    def get_params(cls):
+        from modules import shared, sd_samplers, sd_schedulers
+        samplers = [x.name for x in sd_samplers.all_samplers]
+        schedulers = ["Automatic"] + [x.label for x in sd_schedulers.schedulers]
+        upscalers = [x.name for x in shared.sd_upscalers]
+        return [
+            {"name": "prompt", "type": "text", "label": "Prompt", "default": ""},
+            {"name": "negative_prompt", "type": "text", "label": "Negative Prompt", "default": ""},
+            {"name": "steps", "type": "int", "label": "Steps", "default": 20, "min": 1, "max": 100, "step": 1},
+            {"name": "cfg_scale", "type": "float", "label": "CFG Scale", "default": 4.0, "min": 1.0, "max": 30.0, "step": 0.1},
+            {"name": "shift", "type": "float", "label": "Shift", "default": 1.0, "min": 0.0, "max": 30.0, "step": 0.1},
+            {"name": "denoising_strength", "type": "float", "label": "Denoising Strength", "default": 0.6, "min": 0.0, "max": 1.0, "step": 0.05},
+            {"name": "sampler_name", "type": "enum", "label": "Sampler", "choices": samplers, "default": "Euler"},
+            {"name": "scheduler", "type": "enum", "label": "Scheduler", "choices": schedulers, "default": "Beta"},
+            {"name": "gen_width", "type": "int", "label": "Width", "default": 1024, "min": 256, "max": 2048, "step": 16},
+            {"name": "gen_height", "type": "int", "label": "Height", "default": 1024, "min": 256, "max": 2048, "step": 16},
+            {"name": "seed", "type": "randomseed", "label": "Seed", "default": -1, "min": -1, "max": 4294967295, "step": 1},
+            {"name": "outpaint_pad", "type": "enum", "label": "Outpaint Pad", "choices": ["Black", "White", "Extend Edge", "Edge Blur"], "default": "Black"},
+            {"name": "inpainting_fill", "type": "enum", "label": "Inpainting Fill", "choices": ["fill", "original", "latent noise", "latent nothing"], "default": "original"},
+            {"name": "upscaler_name", "type": "enum", "label": "Upscaler", "choices": upscalers, "default": "None"},
+            {"name": "auto_scale", "type": "bool", "label": "Auto Scale Canvas", "default": True},
+            {"name": "downscale_algo", "type": "enum", "label": "Downscale Algo", "choices": ["Bicubic", "Lanczos", "Bilinear", "Nearest"], "default": "Bicubic"},
+            {"name": "compile_preset", "type": "enum", "label": "Torch Compile Preset", "choices": ["Disable", "guard_filter_fn", "dynamic", "max-autotune", "max-autotune-no-cudagraphs", "reduce-overhead"], "default": "Disable"},
+        ]
+
+    @classmethod
+    def resolve_params(cls, raw_params):
+        def _get(k, default):
+            v = raw_params.get(k)
+            return default if v is None else v
+        
+        # Handle legacy inpainting_fill_idx from older projects
+        legacy_fill = raw_params.get("inpainting_fill_idx")
+        fill_val = _get("inpainting_fill", legacy_fill if legacy_fill is not None else "original")
+        choices = ["fill", "original", "latent noise", "latent nothing"]
+        if isinstance(fill_val, int):
+            fill_val = choices[fill_val] if 0 <= fill_val < len(choices) else "original"
+        elif fill_val not in choices:
+            fill_val = "original"
+        
+        return {
+            "prompt": str(_get("prompt", "")),
+            "negative_prompt": str(_get("negative_prompt", "")),
+            "steps": int(_get("steps", 20)),
+            "cfg_scale": float(_get("cfg_scale", 4.0)),
+            "shift": float(_get("shift", 1.0)),
+            "denoising_strength": float(_get("denoising_strength", 0.6)),
+            "sampler_name": str(_get("sampler_name", "Euler")),
+            "scheduler": str(_get("scheduler", "Beta")),
+            "gen_width": int(_get("gen_width", 1024)),
+            "gen_height": int(_get("gen_height", 1024)),
+            "seed": int(_get("seed", -1)),
+            "outpaint_pad": str(_get("outpaint_pad", "Black")),
+            "inpainting_fill": fill_val,
+            "upscaler_name": str(_get("upscaler_name", "None")),
+            "auto_scale": bool(_get("auto_scale", True)),
+            "downscale_algo": str(_get("downscale_algo", "Bicubic")),
+            "compile_preset": str(_get("compile_preset", "Disable")),
+        }
+
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         global sam2_model
         if sam2_model is not None:
@@ -88,38 +154,58 @@ class ParseInputStep(GenerationStep):
         ctx.source_rect = data.get('source_rect', {})
         ctx.target_rect = data.get('target_rect', {})
         ctx.mask_base64 = data.get('mask_base64', '')
-        
-        ctx.seed = int(ctx.seed) if ctx.seed is not None else -1
-        ctx.shift = float(ctx.shift) if ctx.shift is not None else 3.0
-        ctx.gen_width = int(ctx.gen_width) if ctx.gen_width is not None else 1024
-        ctx.gen_height = int(ctx.gen_height) if ctx.gen_height is not None else 1024
-        ctx.inpainting_fill_idx = int(ctx.inpainting_fill_idx) if ctx.inpainting_fill_idx is not None else 1
-        ctx.outpaint_pad = str(ctx.outpaint_pad) if ctx.outpaint_pad is not None else "Black"
-        ctx.auto_scale = bool(ctx.auto_scale)
-        
-        ctx.generation_res = max(ctx.gen_width, ctx.gen_height)
-        
-        ctx.workflow = data.get("workflow", [])
+
+        # Resolve parse_input's own params (the generation scalars) and write
+        # them back onto ctx.<field> so every downstream step/plugin keeps
+        # reading ctx.prompt / ctx.steps / etc. unchanged.
         payload_step_params = data.get("step_params", {})
-        
+        resolved = ParseInputStep.resolve_params(payload_step_params.get('parse_input', {}))
+        ctx.step_params['parse_input'] = resolved
+        ctx.var = resolved
+        ctx.prompt = resolved['prompt']
+        ctx.negative_prompt = resolved['negative_prompt']
+        ctx.steps = resolved['steps']
+        ctx.cfg_scale = resolved['cfg_scale']
+        ctx.shift = resolved['shift']
+        ctx.denoising_strength = resolved['denoising_strength']
+        ctx.sampler_name = resolved['sampler_name']
+        ctx.scheduler = resolved['scheduler']
+        ctx.gen_width = resolved['gen_width']
+        ctx.gen_height = resolved['gen_height']
+        ctx.seed = resolved['seed']
+        ctx.outpaint_pad = resolved['outpaint_pad']
+        ctx.inpainting_fill = resolved['inpainting_fill']
+        ctx.upscaler_name = resolved['upscaler_name']
+        ctx.auto_scale = resolved['auto_scale']
+        ctx.downscale_algo = resolved['downscale_algo']
+        ctx.compile_preset = resolved['compile_preset']
+        ctx.generation_res = max(ctx.gen_width, ctx.gen_height)
+
+        ctx.workflow = data.get("workflow", [])
+
         plugins = [cls for cls in GenerationStep.__subclasses__() if getattr(cls, 'is_plugin', False)]
-        
+
         for plugin_cls in plugins:
             if plugin_cls.id in payload_step_params:
-                resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
+                plugin_resolved = plugin_cls.resolve_params(payload_step_params[plugin_cls.id])
                 if plugin_cls.id not in ctx.step_params:
                     ctx.step_params[plugin_cls.id] = {}
-                ctx.step_params[plugin_cls.id].update(resolved)
-            
+                ctx.step_params[plugin_cls.id].update(plugin_resolved)
+
         canvas_state.update_workflow(ctx.workflow, ctx.step_params)
-        
+
         return ctx
 
 
 class PrepareCanvasStep(GenerationStep):
     id = "prepare_canvas"
-    name = "Core: Prep Canvas"
+    name = "Prepare Canvas"
     sort_index = 10
+
+    @classmethod
+    def type_signature(cls):
+        return {"in": ["InputImage", "InputMask", "Resolution"], "out": ["InputImage", "InputMask"]}
+
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         prep_info = canvas_state.prepare_generation(
             ctx.source_rect, ctx.target_rect, 
@@ -151,8 +237,13 @@ class PrepareCanvasStep(GenerationStep):
 
 class SetupProcessingStep(GenerationStep):
     id = "setup_processing"
-    name = "Core: Setup SD"
+    name = "Setup SD"
     sort_index = 20
+
+    @classmethod
+    def type_signature(cls):
+        return {"in": ["Prompt", "SamplerConfig", "Resolution", "InputImage", "InputMask"], "out": ["SdProcessing"]}
+
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         if ctx.prep_info.get('is_empty_canvas', False):
             p = processing.StableDiffusionProcessingTxt2Img(
@@ -208,7 +299,7 @@ class SetupProcessingStep(GenerationStep):
                 init_images=[ctx.init_image],
                 mask=ctx.mask,
                 mask_blur=4,
-                inpainting_fill=ctx.inpainting_fill_idx,
+                inpainting_fill=["fill", "original", "latent noise", "latent nothing"].index(ctx.inpainting_fill) if ctx.inpainting_fill in ["fill", "original", "latent noise", "latent nothing"] else 1,
                 resize_mode=0,
                 denoising_strength=ctx.denoising_strength,
                 image_cfg_scale=None,
@@ -273,11 +364,24 @@ def ic_process_images(p, ctx):
 
 class FirstPassStep(GenerationStep):
     id = "first_pass"
-    name = "Core: Generation"
+    name = "Generation"
     sort_index = 100
+
+    @classmethod
+    def type_signature(cls):
+        return {"in": ["SdProcessing"], "out": ["GeneratedImage", "Error"]}
+
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         processed = ic_process_images(ctx.p, ctx)
-            
+
+        # Capture the seed Forge actually sampled (when the user passed -1,
+        # Forge generates one). Exposed via the payload so the frontend's
+        # "reuse seed" button can replay it.
+        try:
+            ctx.used_seed = int(processed.seed)
+        except Exception:
+            ctx.used_seed = None
+
         if processed.images:
             ctx.result_img = processed.images[0]
         else:
@@ -291,8 +395,13 @@ class FirstPassStep(GenerationStep):
 
 class FinalizeStateStep(GenerationStep):
     id = "finalize_state"
-    name = "Core: Finalize"
+    name = "Get Final Image"
     sort_index = 1000
+
+    @classmethod
+    def type_signature(cls):
+        return {"in": ["GeneratedImage"], "out": ["FinalOutputImage"]}
+
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         if not ctx.result_img:
             return ctx
@@ -322,7 +431,12 @@ class FinalizeStateStep(GenerationStep):
         }
         if edge_mask_b64:
             payload["edge_mask"] = edge_mask_b64
-            
+
+        # Surface the seed Forge actually used so the frontend can offer a
+        # "reuse seed" action (re-applies this value to the seed input).
+        if getattr(ctx, "used_seed", None) is not None:
+            payload["used_seed"] = ctx.used_seed
+
         ctx.final_payload = json.dumps(payload)
         return ctx
 
@@ -335,11 +449,13 @@ def api_apply(feather_radius):
         canvas_state.apply_pending_result(feather)
         payload = canvas_state.get_tiles_payload()
         payload["type"] = "apply"
-        return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+        payload["can_undo"] = canvas_state.can_undo()
+        payload["can_redo"] = canvas_state.can_redo()
+        return payload
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return "", gr.update(), gr.update()
+        return {"error": str(e)}
 
 
 def api_discard():
@@ -347,18 +463,22 @@ def api_discard():
         canvas_state.discard_pending_result()
         payload = canvas_state.get_tiles_payload()
         payload["type"] = "discard"
-        return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+        payload["can_undo"] = canvas_state.can_undo()
+        payload["can_redo"] = canvas_state.can_redo()
+        return payload
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return "", gr.update(), gr.update()
+        return {"error": str(e)}
 
 
 def reset_canvas():
     canvas_state.clear()
     payload = canvas_state.get_tiles_payload()
     payload["type"] = "session_clear"
-    return json.dumps(payload), gr.update(interactive=False), gr.update(interactive=False)
+    payload["can_undo"] = False
+    payload["can_redo"] = False
+    return payload
 
 
 def toggle_state(state):
@@ -368,17 +488,32 @@ def toggle_state(state):
     elif state == 'now' and canvas_state.tiles_now:
         canvas_state.tiles = canvas_state._clone_tiles(canvas_state.tiles_now)
         canvas_state.current_state = 'now'
+    
     payload = canvas_state.get_tiles_payload()
     payload["type"] = "toggle"
-    return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+    payload["can_undo"] = canvas_state.can_undo()
+    payload["can_redo"] = canvas_state.can_redo()
+    return payload
 
 
-def handle_upload(image):
-    if image is not None:
-        canvas_state.load_image(image)
+def handle_upload(img):
+    if img is None:
+        return {"error": "No image uploaded"}
+        
+    reset_canvas()
+    
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+        
+    canvas_state.load_image(img)
+    canvas_state.is_dirty = True
+    
     payload = canvas_state.get_tiles_payload()
     payload["type"] = "upload"
-    return json.dumps(payload), gr.update(interactive=canvas_state.can_undo()), gr.update(interactive=canvas_state.can_redo())
+    payload["can_undo"] = canvas_state.can_undo()
+    payload["can_redo"] = canvas_state.can_redo()
+    return payload
+
 def api_list_projects():
     if not os.path.exists(canvas_state.projects_dir):
         return []
@@ -409,6 +544,14 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
     data = json.loads(payload_json) if payload_json else {}
     viewport = data.get("viewport", {})
     mask_b64 = data.get("mask", "")
+
+    # Tell the frontend we've started saving so it can open the toast.
+    safe_name_preview = re.sub(r'[^\w\-_\. ]', '_', str(p_name)) if p_name else "project"
+    try:
+        from scripts.ic_server.api_routes import manager
+        manager.broadcast_from_thread({"type": "save", "status": "saving", "name": safe_name_preview})
+    except Exception as e:
+        print(f"[Infinite Canvas] Failed to broadcast save-start: {e}")
 
     meta = {
         "version": 2,
@@ -486,13 +629,20 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
 
     safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name)) if p_name else "project"
     if not safe_name: safe_name = "project"
-    
+
     canvas_state.current_project_name = safe_name
-    
+
     os.makedirs(canvas_state.projects_dir, exist_ok=True)
     file_path = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
     with open(file_path, "wb") as f:
         f.write(zip_buffer.getvalue())
+
+    # Signal completion so the frontend closes the "saving" toast.
+    try:
+        from scripts.ic_server.api_routes import manager
+        manager.broadcast_from_thread({"type": "save", "status": "done", "name": safe_name})
+    except Exception as e:
+        print(f"[Infinite Canvas] Failed to broadcast save-done: {e}")
 
     return gr.update(choices=api_list_projects(), value=safe_name)
 
@@ -574,15 +724,20 @@ def _load_zip_into_canvas_state(filepath):
 
         # Legacy compatibility: load mask either from mask.webp or stitched mask tiles
         m_img = None
-        mask_tiles = load_tiles("mask")
-        if mask_tiles:
-            max_tx = max([tx for tx, ty in mask_tiles.keys()] + [0])
-            max_ty = max([ty for tx, ty in mask_tiles.keys()] + [0])
-            w = (max_tx + 1) * 1024
-            h = (max_ty + 1) * 1024
-            m_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            for (tx, ty), tile_img in mask_tiles.items():
-                m_img.paste(tile_img, (tx * 1024, ty * 1024))
+        if "mask.webp" in zip_ref.namelist():
+            m_img = Image.open(BytesIO(zip_ref.read("mask.webp"))).convert("RGBA")
+        elif "mask.png" in zip_ref.namelist():
+            m_img = Image.open(BytesIO(zip_ref.read("mask.png"))).convert("RGBA")
+        else:
+            mask_tiles = load_tiles("mask")
+            if mask_tiles:
+                max_tx = max([tx for tx, ty in mask_tiles.keys()] + [0])
+                max_ty = max([ty for tx, ty in mask_tiles.keys()] + [0])
+                w = (max_tx + 1) * 1024
+                h = (max_ty + 1) * 1024
+                m_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                for (tx, ty), tile_img in mask_tiles.items():
+                    m_img.paste(tile_img, (tx * 1024, ty * 1024))
             
         if m_img:
             m_io = BytesIO()
@@ -602,8 +757,10 @@ def api_load_project(p_name, recover_autosave=False, *args):
         safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
         
         filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+        proj_filepath = filepath
+        autosave_filepath = os.path.join(canvas_state.autosaves_dir, f"{safe_name}.infcanvas")
+        
         if recover_autosave:
-            autosave_filepath = os.path.join(canvas_state.autosaves_dir, f"{safe_name}.infcanvas")
             if os.path.exists(autosave_filepath):
                 filepath = autosave_filepath
                 print(f"[DEBUG] Recovering autosave from: {filepath}")
@@ -617,6 +774,7 @@ def api_load_project(p_name, recover_autosave=False, *args):
         canvas_state.current_project_name = loaded_name
         meta, mask_b64 = _load_zip_into_canvas_state(filepath)
         print("[DEBUG] Successfully loaded zip into canvas state")
+        
 
         import time
         payload = canvas_state.get_tiles_payload(skip_autosave=True)
@@ -624,73 +782,87 @@ def api_load_project(p_name, recover_autosave=False, *args):
         payload["viewport"] = meta.get("viewport", {})
         payload["mask"] = mask_b64
         payload["ts"] = time.time()
-        
-        print(f"[Infinite Canvas] Project loaded successfully ({len(canvas_state.tiles)} tiles, mask: {len(mask_b64)} bytes)")
+        payload["loaded_name"] = loaded_name
 
-        return [
-            json.dumps(payload),
-            gr.update(interactive=canvas_state.can_undo()),
-            gr.update(interactive=canvas_state.can_redo()),
-            meta.get("prompt", gr.skip()),
-            meta.get("negative_prompt", gr.skip()),
-            meta.get("steps", gr.skip()),
-            meta.get("cfg_scale", gr.skip()),
-            meta.get("shift", gr.skip()),
-            meta.get("denoising_strength", gr.skip()),
-            meta.get("sampler_name", gr.skip()),
-            meta.get("scheduler", gr.skip()),
-            meta.get("gen_width", gr.skip()),
-            meta.get("gen_height", gr.skip()),
-            meta.get("seed", gr.skip()),
-            meta.get("inpainting_fill", 1),
-            meta.get("outpaint_pad", "Black"),
-            meta.get("upscaler_name_input", gr.skip()),
-            meta.get("downscale_algo_input", gr.skip()),
-            meta.get("auto_scale", gr.skip()),
-            gr.update(value=loaded_name)
-        ]
+        # The frontend now reads generation params from canvas_state.step_params
+        # via /workflow (the project_load handler re-fetches /workflow, which
+        # re-renders ParseInputStep's card). So make sure step_params['parse_input']
+        # is populated here — either from the saved step_params, or rebuilt from
+        # the legacy flat meta keys for old (pre-refactor) project files.
+        meta_step_params = meta.get("step_params", {})
+        if isinstance(meta_step_params, dict) and meta_step_params.get('parse_input'):
+            # New-format project: parse_input already saved alongside plugin params.
+            pass  # canvas_state.step_params was already restored by _load_zip_into_canvas_state.
+        else:
+            # Legacy project (or step_params.parse_input missing): rebuild
+            # parse_input from the flat meta keys. Map the old key names that
+            # differ from ParseInputStep's param names.
+            legacy = {
+                "prompt": meta.get("prompt", ""),
+                "negative_prompt": meta.get("negative_prompt", ""),
+                "steps": meta.get("steps", 20),
+                "cfg_scale": meta.get("cfg_scale", 4.0),
+                "shift": meta.get("shift", 1.0),
+                "denoising_strength": meta.get("denoising_strength", 0.6),
+                "sampler_name": meta.get("sampler_name", "Euler"),
+                "scheduler": meta.get("scheduler", "Beta"),
+                "gen_width": meta.get("gen_width", 1024),
+                "gen_height": meta.get("gen_height", 1024),
+                "seed": meta.get("seed", -1),
+                "inpainting_fill": meta.get("inpainting_fill", "original"),
+                "outpaint_pad": meta.get("outpaint_pad", "Black"),
+                "upscaler_name": meta.get("upscaler_name_input", "None"),
+                "auto_scale": meta.get("auto_scale", True),
+                "downscale_algo": meta.get("downscale_algo_input", "Bicubic"),
+                "compile_preset": meta.get("compile_preset", "Disable"),
+            }
+            if 'parse_input' not in canvas_state.step_params:
+                canvas_state.step_params['parse_input'] = {}
+            canvas_state.step_params['parse_input'].update(ParseInputStep.resolve_params(legacy))
+
+        print(f"[Infinite Canvas] Project loaded successfully ({len(canvas_state.tiles)} tiles, mask: {len(mask_b64)} bytes)")
+        return payload
     except Exception as e:
         import traceback
         print(f"Error loading project: {e}")
         traceback.print_exc()
-        return [json.dumps({"type": "error", "message": f"Failed to load project: {e}"})] + [gr.skip()]*19
+        return {"error": f"Failed to load project: {e}"}
 
 
-def api_import_project(*args):
+def api_import_project(filepath):
     import os, shutil, re
-    file_info = args[0] if args else None
-    if file_info is None:
-        return [gr.skip()] * 21
+    if not filepath or not os.path.exists(filepath):
+        return {"error": "Invalid file path"}
         
     try:
-        filepath = file_info.name if hasattr(file_info, "name") else file_info
         basename = os.path.basename(filepath)
         safe_name = re.sub(r'[^\w\-_\. ]', '_', os.path.splitext(basename)[0])
         
         new_filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
         shutil.copy2(filepath, new_filepath)
         
-        return api_load_project(safe_name) + [gr.update(value=None)]
+        return api_load_project(safe_name)
     except Exception as e:
-        import json
+        import traceback
         print(f"Error importing project: {e}")
-        return [json.dumps({"type": "error", "message": f"Failed to import project: {e}"})] + [gr.skip()]*19 + [gr.update(value=None)]
+        traceback.print_exc()
+        return {"error": f"Failed to import project: {e}"}
 
 
 def api_set_autosave(enabled):
     canvas_state.autosave_enabled = bool(enabled)
-    return None
+    return {"status": "success"}
 
 def api_check_autosave():
     status = getattr(canvas_state, "autosave_status", "idle")
     if status == "done":
         canvas_state.autosave_status = "idle"
-    return status
+    return {"status": status}
 
 def api_check_project_autosave(p_name):
-    import os, json, re, time
+    import os, time, re
     ts = time.time()
-    if not p_name: return json.dumps({"has_newer": False, "ts": ts})
+    if not p_name: return {"has_newer": False, "ts": ts}
     
     safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
     proj_path = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
@@ -701,19 +873,25 @@ def api_check_project_autosave(p_name):
         if os.path.exists(proj_path):
             proj_mtime = os.path.getmtime(proj_path)
             if autosave_mtime > proj_mtime:
-                return json.dumps({"has_newer": True, "ts": ts})
+                return {"has_newer": True, "ts": ts}
         else:
-            return json.dumps({"has_newer": True, "ts": ts})
+            return {"has_newer": True, "ts": ts}
             
-    return json.dumps({"has_newer": False, "ts": ts})
+    return {"has_newer": False, "ts": ts}
 
 def api_sam_predict(payload_json):
-    if not payload_json: return ""
+    if not payload_json: return {"error": "Empty payload"}
     try:
+        import json
+        import os
+        from io import BytesIO
+        import base64
+        from PIL import Image
+        
         data = json.loads(payload_json)
         points = data.get("points") # list of [x, y]
         image_b64 = data.get("image")
-        if not points or not image_b64: return ""
+        if not points or not image_b64: return {"error": "Missing points or image"}
 
         import numpy as np
 
@@ -737,13 +915,13 @@ def api_sam_predict(payload_json):
                     print("[Infinite Canvas] SAM 2.1 model downloaded successfully.")
                 except Exception as e:
                     print(f"[Infinite Canvas] Error downloading SAM 2.1 model: {e}")
-                    return json.dumps({"type": "error", "message": "Failed to download SAM model. Please check the console."})
+                    return {"type": "error", "message": "Failed to download SAM model. Please check the console."}
 
             try:
                 sam2_model = SAM(sam_model_path)
             except Exception as e:
                 print(f"[Infinite Canvas] Error loading SAM 2.1 model: {e}")
-                return json.dumps({"type": "error", "message": "Failed to load SAM model. Please check the console."})
+                return {"type": "error", "message": "Failed to load SAM model. Please check the console."}
 
         # ultralytics SAM inference
         print(f"[Infinite Canvas] SAM Predict - Image shape: {image_np.shape}, Points: {points}")
@@ -771,18 +949,18 @@ def api_sam_predict(payload_json):
                 mask_img.save(buffered, format="PNG")
                 mask_b64 = "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-                return json.dumps({
+                return {
                     "type": "sam_result",
                     "mask": mask_b64
-                })
+                }
             else:
                 print("[Infinite Canvas] SAM found no object at the given point.")
-                return json.dumps({"type": "error", "message": "No object found at the clicked point."})
+                return {"type": "error", "message": "No object found at the clicked point."}
     except Exception as e:
         print(f"[Infinite Canvas] SAM Predict Error: {e}")
         import traceback
         traceback.print_exc()
-        return json.dumps({"type": "error", "message": str(e)})
-    return ""
+        return {"type": "error", "message": str(e)}
+    return {"error": "Unknown SAM predict error"}
 
 

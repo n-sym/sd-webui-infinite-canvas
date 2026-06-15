@@ -1,7 +1,5 @@
     
-    const outArea = document.querySelector('#ic_output textarea');
-    if (outArea) {
-        let lastText = "";
+    // Initial load empty
         // --- MODAL LOGIC ---
         let modalVisible = false;
         let pendingUpdate = null;
@@ -23,56 +21,63 @@
                 featherRadius = parseInt(e.target.value);
                 featherValDisplay.innerText = featherRadius;
                 
-                // Update hidden gradio input
-                const hiddenFeather = document.querySelector('#ic_apply_feather_input input');
-                if (hiddenFeather) {
-                    hiddenFeather.value = featherRadius;
-                    hiddenFeather.dispatchEvent(new Event('input', {bubbles: true}));
-                }
+                // No hidden gradio input to update anymore
             });
         }
-        // Setup Dynamic Modal
-        const dynamicModal = document.getElementById('ic_dynamic_modal');
-        const dynamicModalTitle = document.getElementById('ic_dynamic_modal_title');
-        const dynamicModalContent = document.getElementById('ic_dynamic_modal_content');
-        
-        window.ic_continue_generation = function(session_id, result_data) {
+        window.ic_continue_generation = async function(session_id, result_data) {
+            console.log("[Infinite Canvas] ic_continue_generation called with session_id:", session_id, "result_data:", result_data);
+            const dynamicModal = document.getElementById('ic_dynamic_modal');
             if (dynamicModal) dynamicModal.style.display = 'none';
             window.exist_pending_generation = false;
-            
+
             const resumePayload = Object.assign({ session_id: session_id }, result_data);
-            
-            const payloadArea = document.querySelector('#ic_resume_payload textarea');
-            if (payloadArea) {
-                payloadArea.value = JSON.stringify(resumePayload);
-                payloadArea.dispatchEvent(new Event('input', {bubbles: true}));
-            }
-            
-            // re-arm progress toast if continuing
-            if (result_data && result_data.action !== 'cancel') {
-                window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + ")";
-                if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
-                if (typeof requestProgress === 'function') {
-                    requestProgress(
-                        window.ic_current_task_id,
-                        document.getElementById("ic-dummy-inner"),
-                        null,
-                        function() {
-                            window.ic_current_task_id = null;
-                            const toast = document.getElementById('ic-progress-toast');
-                            if (toast && !window.exist_pending_generation) toast.style.display = 'none';
-                            if (typeof showSubmitButtons === 'function' && !window.exist_pending_generation) showSubmitButtons("ic", true);
-                        }
-                    );
-                }
+
+            // Generate/Interrupt mutual exclusion across the /cont resume.
+            // If continuing (not cancelling), the pipeline is running again →
+            // show Interrupt, hide Generate, set a task id to block re-entry.
+            // If cancelling, just restore the Generate button.
+            const isCancel = !!(result_data && result_data.action === 'cancel');
+            const genBtn = document.getElementById('ic-sidebar-generate-btn');
+            const intBtn = document.getElementById('ic-sidebar-interrupt-btn');
+            if (!isCancel) {
+                window.ic_current_task_id = "task(" + Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7) + ")";
+                if (genBtn) genBtn.style.display = 'none';
+                if (intBtn) intBtn.style.display = 'block';
             } else {
-                if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", true);
+                window.ic_current_task_id = null;
+                if (genBtn) genBtn.style.display = 'block';
+                if (intBtn) intBtn.style.display = 'none';
             }
-            
-            setTimeout(() => {
-                const triggerBtn = document.getElementById('ic_resume_trigger');
-                if (triggerBtn) triggerBtn.click();
-            }, 50);
+
+            try {
+                const res = await fetch('/infinite-canvas-api/cont', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ payload_json: JSON.stringify(resumePayload) })
+                });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Failed to resume:", e);
+            } finally {
+                // Mirror the generate() finally: if the resume paused again on
+                // another dynamic_dialog, keep Interrupt; otherwise restore Generate.
+                if (window.exist_pending_generation) {
+                    if (genBtn) genBtn.style.display = 'none';
+                    if (intBtn) intBtn.style.display = 'block';
+                } else {
+                    window.ic_current_task_id = null;
+                    if (genBtn) genBtn.style.display = 'block';
+                    if (intBtn) intBtn.style.display = 'none';
+                }
+                if (typeof icHideToast === 'function') {
+                    icHideToast('ic-progress-toast');
+                    icHideToast('ic-cancel-toast');
+                }
+                if (!window.exist_pending_generation) {
+                    window.icCancelling = false;
+                }
+            }
         };
 
         
@@ -323,18 +328,23 @@
         
         window.addEventListener('mouseup', () => { modalDragging = false; });
         
-        modalBtnDiscard.addEventListener('click', () => {
+        modalBtnDiscard.addEventListener('click', async () => {
             modalVisible = false;
             modalOverlay.style.display = 'none';
             pendingUpdate = null;
             pendingPatchImage.src = '';
             pendingMaskImage.src = '';
             pendingEdgeMaskImage.src = '';
-            const discardBtn = document.getElementById('ic_discard_hidden');
-            if (discardBtn) discardBtn.click();
+            try {
+                const res = await fetch('/infinite-canvas-api/discard', { method: 'POST' });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Discard error:", e);
+            }
         });
         
-        modalBtnApply.addEventListener('click', () => {
+        modalBtnApply.addEventListener('click', async () => {
             modalVisible = false;
             modalOverlay.style.display = 'none';
             
@@ -364,8 +374,17 @@
             pendingPatchImage.src = '';
             pendingMaskImage.src = '';
             pendingEdgeMaskImage.src = '';
-            const applyBtn = document.getElementById('ic_apply_hidden');
-            if (applyBtn) applyBtn.click();
+            try {
+                const res = await fetch('/infinite-canvas-api/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ feather_radius: featherRadius })
+                });
+                const data = await res.json();
+                if (window.ic_handle_payload) window.ic_handle_payload(data);
+            } catch (e) {
+                console.error("Apply error:", e);
+            }
         });
         
         // Modal render loop — only schedules frames while modal is visible
@@ -376,20 +395,10 @@
             }
         };
 
-        const outputEl = document.getElementById('ic_output');
-        const handleOutput = () => {
-            const currentOutArea = document.querySelector('#ic_output textarea');
-            const text = currentOutArea ? currentOutArea.value : '';
-            
-            if (text === '') {
-                lastText = '';
-            }
-            if (text && text !== lastText && text.startsWith('{')) {
-                lastText = text;
-                try {
-                    const data = JSON.parse(text);
-
-                    if (window.icStartAutosavePoller) window.icStartAutosavePoller();
+        window.ic_handle_payload = function(data) {
+            try {
+                if (window.ic_handle_workflow_output) window.ic_handle_workflow_output(data);
+                if (window.icStartAutosavePoller) window.icStartAutosavePoller();
                     
                     const populateTiles = (tilesArray) => {
                         window.ic_tiles = {};
@@ -406,13 +415,13 @@
                         }
                     };
 
-                    if (data.type === 'toggle' || data.type === 'upload' || data.type === 'discard' || data.type === 'apply' || data.type === 'project_load' || data.type === 'session_cleared') {
+                    if (data.type === 'toggle' || data.type === 'upload' || data.type === 'discard' || data.type === 'apply' || data.type === 'project_load' || data.type === 'session_cleared' || data.type === 'session_clear') {
                         if (data.tiles) {
                             populateTiles(data.tiles);
                         }
                         
                         if (data.type === 'project_load') {
-                            if (window.icHideToast) {
+                            if (typeof icHideToast === 'function') {
                                 icHideToast('ic-autosave-toast');
                                 icHideToast('ic-save-toast');
                             }
@@ -424,8 +433,61 @@
                                     toast.children[0].style.marginBottom = '0';
                                 }
                             }
+                            
+                            // 1. Restore viewport FIRST
+                            if (data.viewport) {
+                                if (data.viewport.scale !== undefined) scale = data.viewport.scale;
+                                if (data.viewport.offsetX !== undefined) offsetX = data.viewport.offsetX;
+                                if (data.viewport.offsetY !== undefined) offsetY = data.viewport.offsetY;
+                                if (data.viewport.sourceRect) {
+                                    sourceRect = data.viewport.sourceRect;
+                                    if (data.viewport.targetRect) {
+                                        targetRect = data.viewport.targetRect;
+                                    } else {
+                                        targetRect.x = sourceRect.x;
+                                        targetRect.y = sourceRect.y;
+                                        targetRect.w = sourceRect.w;
+                                        targetRect.h = sourceRect.h;
+                                    }
+                                }
+                            }
+
+                            // 2. Fetch workflow, apply it, enforce aspect ratio, THEN load mask
+                            fetch('/infinite-canvas-api/workflow')
+                                .then(res => res.json())
+                                .then(wdata => {
+                                    if (window.ic_handle_workflow_output) window.ic_handle_workflow_output(wdata);
+                                    if (typeof enforceSourceRatio === 'function') enforceSourceRatio();
+                                    if (typeof draw === 'function') draw(); // Update blue box
+
+                                    // Load mask LAST, stretching it to the finalized maskDataCanvas resolution
+                                    if (data.mask && data.mask.trim().length > 0) {
+                                        const img = new Image();
+                                        img.onload = () => {
+                                            const res = window.ic_getMaskResolution();
+                                            maskDataCanvas.width = res.w;
+                                            maskDataCanvas.height = res.h;
+                                            maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
+                                            maskDataCtx.imageSmoothingEnabled = false;
+                                            maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
+                                            maskDataCtx.drawImage(img, 0, 0, maskDataCanvas.width, maskDataCanvas.height);
+                                            if (typeof resetMaskHistory === 'function') resetMaskHistory();
+                                            if (typeof draw === 'function') draw();
+                                        };
+                                        img.src = data.mask;
+                                    } else {
+                                        const res = window.ic_getMaskResolution();
+                                        maskDataCanvas.width = res.w;
+                                        maskDataCanvas.height = res.h;
+                                        maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
+                                        maskDataCtx.imageSmoothingEnabled = false;
+                                        maskDataCtx.clearRect(0, 0, maskDataCanvas.width, maskDataCanvas.height);
+                                        if (typeof resetMaskHistory === 'function') resetMaskHistory();
+                                        if (typeof draw === 'function') draw();
+                                    }
+                                })
+                                .catch(e => console.error("Failed to fetch workflow after load", e));
                         }
-                        
                         if (data.type === 'session_clear' || data.type === 'session_cleared') {
                             scale = 1;
                             offsetX = 0;
@@ -450,6 +512,13 @@
                         previewScale = scale;
                         previewCenterX = (canvas.width / 2 - offsetX) / scale;
                         previewCenterY = (canvas.height / 2 - offsetY) / scale;
+
+                        // Cache the seed Forge actually sampled so the seed
+                        // row's "reuse" button can replay it. When the user
+                        // sent seed=-1 this is the randomly-chosen value.
+                        if (data.used_seed !== undefined && data.used_seed !== null) {
+                            window.ic_last_used_seed = data.used_seed;
+                        }
                         
                         imagesLoaded = 0;
                         imagesToLoad = 2;
@@ -475,8 +544,18 @@
                         requestAnimationFrame(modalLoop);
                         modalOverlay.style.display = 'flex';
                     } else if (data.type === 'dynamic_dialog') {
+                        console.log("[Infinite Canvas] Received dynamic_dialog payload:", data);
+                        const dynamicModal = document.getElementById('ic_dynamic_modal');
+                        const dynamicModalTitle = document.getElementById('ic_dynamic_modal_title');
+                        const dynamicModalContent = document.getElementById('ic_dynamic_modal_content');
+
+                        if (!dynamicModal || !dynamicModalTitle || !dynamicModalContent) {
+                            console.error("[Infinite Canvas] Failed to find dynamic modal elements in DOM.");
+                        } else {
+                            console.log("[Infinite Canvas] Found dynamic modal elements, displaying dialog.");
+                        }
+
                         window.exist_pending_generation = true;
-                        if (typeof showSubmitButtons === 'function') showSubmitButtons("ic", false);
                         
                         if (dynamicModalTitle) dynamicModalTitle.innerText = data.title || t("Dialog");
                         if (dynamicModalContent) dynamicModalContent.innerHTML = data.html || "";
@@ -484,6 +563,7 @@
                         
                         if (data.js) {
                             try {
+                                console.log("[Infinite Canvas] Executing dynamic dialog JS snippet.");
                                 const fn = new Function('session_id', 'modal', data.js);
                                 fn(data.session_id, dynamicModal);
                             } catch(e) {
@@ -496,48 +576,6 @@
                         if (window.unlockProjectUI) window.unlockProjectUI();
                         console.error("[Infinite Canvas]", data.message);
                         if (window.icShowCustomToast) window.icShowCustomToast(data.message, 3000, 'red', 'ic-error-toast');
-                    } else if (data.type === 'project_load') {
-                        // Suppress enforceSourceRatio() during the entire load.
-                        window._ic_project_load_suppress = true;
-                        if (window._ic_project_load_timer) clearTimeout(window._ic_project_load_timer);
-                        window._ic_project_load_timer = setTimeout(() => {
-                            window._ic_project_load_suppress = false;
-                            window._ic_project_load_timer = null;
-                            draw();
-                            if (window.unlockProjectUI) window.unlockProjectUI();
-                        }, 600);
-
-                        // Restore viewport FIRST
-                        if (data.viewport) {
-                            const vp = data.viewport;
-                            scale = vp.scale;
-                            offsetX = vp.offsetX;
-                            offsetY = vp.offsetY;
-                            sourceRect = vp.sourceRect;
-                        }
-
-                        if (data.tiles) {
-                            populateTiles(data.tiles);
-                        }
-                        
-                        if (data.mask) {
-                            const img = new Image();
-                            img.onload = () => {
-                                const res = window.ic_getMaskResolution();
-                                maskDataCanvas.width = res.w;
-                                maskDataCanvas.height = res.h;
-                                maskDataCtx = maskDataCanvas.getContext('2d', {willReadFrequently: true});
-                                maskDataCtx.imageSmoothingEnabled = false;
-                                maskDataCtx.drawImage(img, 0, 0, maskDataCanvas.width, maskDataCanvas.height);
-                                resetMaskHistory(); // Reset history after project load
-                                draw();
-                            };
-                            img.src = data.mask;
-                        } else {
-                            clearMask(); // clearMask already calls saveMaskState
-                        }
-
-                        draw();
                     } else if (data.type === 'sam_result') {
                         if (data.mask) {
                             const img = new Image();
@@ -558,13 +596,7 @@
                         document.body.style.cursor = 'default';
                         canvas.style.cursor = 'crosshair';
                     }
-                } catch (e) {
-                    console.error("Failed to parse result payload", e);
-                }
+            } catch (e) {
+                console.error("Failed to parse result payload", e);
             }
         };
-        if (outputEl) {
-            const outputObserver = new MutationObserver(handleOutput);
-            outputObserver.observe(outputEl, { childList: true, subtree: true, attributes: true, characterData: true });
-        }
-    }

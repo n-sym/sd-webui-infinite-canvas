@@ -6,11 +6,15 @@ class AppendCloseUpStep(GenerationStep):
     name = "Append Close-Up"
     is_plugin = True
     sort_index = 18
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["Prompt"], "out": ["Prompt"]}
     
     @classmethod
     def get_params(cls):
         return [
-            {"name": "enabled", "type": "bool", "label": "Enable", "default": False}
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False, "is_generation_param": False}
         ]
         
     @classmethod

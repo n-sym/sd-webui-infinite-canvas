@@ -134,59 +134,65 @@ function icUpdateToastTheme(hue) {
     icUpdateToastThemeForElement(document.getElementById('ic-progress-toast'), hue);
 }
 
-async function icPollProgress() {
-    if (!window.ic_current_task_id) return;
-    try {
-        const res = await fetch('/internal/progress', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id_task: window.ic_current_task_id,
-                id_live_preview: -1
-            })
-        });
-        const data = await res.json();
-        
-        if (data.active) {
-            const toast = icGetOrCreateToast('ic-progress-toast');
-            icShowToast('ic-progress-toast');
-            
-            let customPct = -1;
-            if (data.textinfo && data.textinfo.includes('|')) {
-                const parts = data.textinfo.split('|');
-                icLastValidStep = parts[0];
-                icLastValidHue = parts[1];
-                
-                if (parts.length >= 4) {
-                    const totalSteps = parseInt(parts[2]);
-                    const accSteps = parseInt(parts[3]);
-                    if (totalSteps > 0 && data.state) {
-                        const currentSamplingStep = data.state.sampling_step || 0;
-                        const totalDone = accSteps + currentSamplingStep;
-                        customPct = Math.max(0, Math.min(100, Math.round((totalDone / totalSteps) * 100)));
-                    }
+// Render one progress frame coming from either the WS push or the polling
+// fallback. `data` shape: {active, textinfo, state:{sampling_step,sampling_steps}, progress}
+window.icRenderProgressFrame = function(data) {
+    if (!data) return;
+    if (data.active) {
+        const toast = icGetOrCreateToast('ic-progress-toast');
+        icShowToast('ic-progress-toast');
+
+        let customPct = -1;
+        if (data.textinfo && data.textinfo.includes('|')) {
+            const parts = data.textinfo.split('|');
+            icLastValidStep = parts[0];
+            icLastValidHue = parts[1];
+
+            if (parts.length >= 4) {
+                const totalSteps = parseInt(parts[2]);
+                const accSteps = parseInt(parts[3]);
+                if (totalSteps > 0 && data.state) {
+                    const currentSamplingStep = data.state.sampling_step || 0;
+                    const totalDone = accSteps + currentSamplingStep;
+                    customPct = Math.max(0, Math.min(100, Math.round((totalDone / totalSteps) * 100)));
                 }
             }
-            
-            const txtElem = toast.querySelector('.ic-toast-text');
-            const pctElem = toast.querySelector('.ic-toast-pct');
-            const barElem = toast.querySelector('.ic-toast-bar');
-            
-            if (txtElem) txtElem.innerText = (typeof t === 'function' ? t(icLastValidStep) : icLastValidStep) || t("Processing...");
-            
-            const pct = customPct >= 0 ? customPct : Math.max(0, Math.min(100, Math.round(data.progress * 100)));
-            if (pctElem) pctElem.innerText = pct + '%';
-            if (barElem) {
-                barElem.classList.remove('ic-toast-bar-indeterminate');
-                barElem.style.width = pct + '%';
-            }
-            
-            icUpdateToastThemeForElement(toast, icLastValidHue);
-            
-        } else {
-            icHideToast('ic-progress-toast');
-            icLastValidStep = "";
         }
+
+        const txtElem = toast.querySelector('.ic-toast-text');
+        const pctElem = toast.querySelector('.ic-toast-pct');
+        const barElem = toast.querySelector('.ic-toast-bar');
+
+        if (txtElem) txtElem.innerText = (typeof t === 'function' ? t(icLastValidStep) : icLastValidStep) || t("Processing...");
+
+        const pct = customPct >= 0 ? customPct : Math.max(0, Math.min(100, Math.round(data.progress * 100)));
+        if (pctElem) pctElem.innerText = pct + '%';
+        if (barElem) {
+            barElem.classList.remove('ic-toast-bar-indeterminate');
+            barElem.style.width = pct + '%';
+        }
+
+        icUpdateToastThemeForElement(toast, icLastValidHue);
+    } else {
+        icHideToast('ic-progress-toast');
+        icLastValidStep = "";
+        // Job just went inactive — if a cancel was submitted, the backend has
+        // now actually stopped, so dismiss the "Submitting cancel..." toast.
+        if (window.icCancelling) {
+            if (typeof icHideToast === 'function') icHideToast('ic-cancel-toast');
+            window.icCancelling = false;
+        }
+    }
+};
+
+async function icPollProgress() {
+    // Polling fallback — only used if the WS connection drops. While the WS is
+    // alive, 05_api.js sets window.icWSAlive = true and we skip the fetch.
+    if (window.icWSAlive) return;
+    try {
+        const res = await fetch('/infinite-canvas-api/progress', { method: 'GET' });
+        const data = await res.json();
+        window.icRenderProgressFrame(data);
     } catch (e) {
         // ignore fetch errors
     }
@@ -242,7 +248,7 @@ window.icRenderToastState = function() {
 };
 
 function _initICProgressRunner() {
-    const icOutput = document.getElementById('ic_output');
+    const icOutput = document.getElementById('ic-container');
     if (!icOutput) {
         setTimeout(_initICProgressRunner, 500);
         return;
@@ -269,9 +275,7 @@ function _initICProgressRunner() {
             document.head.appendChild(style);
             
             setInterval(() => {
-                if (window.ic_current_task_id) {
-                    icPollProgress();
-                }
+                icPollProgress();
             }, 500);
         }, 1000);
     }

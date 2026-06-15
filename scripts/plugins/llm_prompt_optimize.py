@@ -12,37 +12,44 @@ class LLMPromptOptimizeStep(GenerationStep):
     name = "LLM Prompt Optimizer"
     is_plugin = True
     sort_index = 15
+
+    @classmethod
+    def type_signature(cls) -> Dict[str, list]:
+        return {"in": ["Prompt"], "out": ["Prompt"]}
     
     @classmethod
     def get_params(cls):
         return [
-            {"name": "enabled", "type": "bool", "label": "Enable", "default": False},
-            {"name": "enable_cache", "type": "bool", "label": "Enable LRU Cache", "default": True},
-            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.deepseek.com/chat/completions"},
-            {"name": "api_key", "type": "password", "label": "API Key", "default": ""},
-            {"name": "model", "type": "string", "label": "Model Name", "default": "deepseek-v4-flash"},
+            {"name": "enabled", "type": "bool", "label": "Enable", "default": False, "is_generation_param": False},
+            {"name": "enable_cache", "type": "bool", "label": "Enable LRU Cache", "default": True, "is_generation_param": False},
+            {"name": "api_url", "type": "string", "label": "API URL", "default": "https://api.deepseek.com/chat/completions", "is_generation_param": False},
+            {"name": "api_key", "type": "password", "label": "API Key", "default": "", "is_generation_param": False},
+            {"name": "model", "type": "string", "label": "Model Name", "default": "deepseek-v4-flash", "is_generation_param": False},
             {"name": "detail_richness", "type": "float", "label": "Detail Richness", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.1},
             {"name": "prompt_fidelity", "type": "float", "label": "Prompt Fidelity", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.1},
             {"name": "nl_style", "type": "enum", "label": "Language Style", "choices": ["Mixed", "Pure Natural Language", "Pure Tag Style"], "default": "Mixed"},
-            {"name": "prefix_tags", "type": "string", "label": "Prefix Tags", "default": "safe, year 2025, newest, masterpiece, best quality, score_9, score_8"},
-            {"name": "character_tags", "type": "string", "label": "Character & Series", "default": ""},
-            {"name": "style_tags", "type": "string", "label": "Artist & Style", "default": ""}
+            {"name": "prefix_tags", "type": "text", "label": "Prefix Tags", "default": "safe, year 2025, newest, masterpiece, best quality, score_9, score_8"},
+            {"name": "character_tags", "type": "text", "label": "Character & Series", "default": ""},
+            {"name": "style_tags", "type": "text", "label": "Artist & Style", "default": ""}
         ]
         
     @classmethod
     def resolve_params(cls, raw_params: Dict[str, Any]) -> Dict[str, Any]:
+        def _get(k, default):
+            v = raw_params.get(k)
+            return default if v is None else v
         return {
-            "enabled": bool(raw_params.get("enabled", False)),
-            "enable_cache": bool(raw_params.get("enable_cache", True)),
-            "api_url": str(raw_params.get("api_url", "https://api.deepseek.com/chat/completions")),
-            "api_key": str(raw_params.get("api_key", "")),
-            "model": str(raw_params.get("model", "deepseek-v4-flash")),
-            "detail_richness": float(raw_params.get("detail_richness", 0.5)),
-            "prompt_fidelity": float(raw_params.get("prompt_fidelity", 0.5)),
-            "nl_style": str(raw_params.get("nl_style", "Mixed")),
-            "prefix_tags": str(raw_params.get("prefix_tags", "safe, year 2025, newest, masterpiece, best quality, score_9, score_8")),
-            "character_tags": str(raw_params.get("character_tags", "")),
-            "style_tags": str(raw_params.get("style_tags", ""))
+            "enabled": bool(_get("enabled", False)),
+            "enable_cache": bool(_get("enable_cache", True)),
+            "api_url": str(_get("api_url", "https://api.deepseek.com/chat/completions")),
+            "api_key": str(_get("api_key", "")),
+            "model": str(_get("model", "deepseek-v4-flash")),
+            "detail_richness": float(_get("detail_richness", 0.5)),
+            "prompt_fidelity": float(_get("prompt_fidelity", 0.5)),
+            "nl_style": str(_get("nl_style", "Mixed")),
+            "prefix_tags": str(_get("prefix_tags", "safe, year 2025, newest, masterpiece, best quality, score_9, score_8")),
+            "character_tags": str(_get("character_tags", "")),
+            "style_tags": str(_get("style_tags", ""))
         }
         
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
