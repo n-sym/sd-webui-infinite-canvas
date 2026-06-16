@@ -267,6 +267,15 @@ def update_workflow(req: UpdateWorkflowRequest):
     res = scripts.node_manager.api_update_workflow(req.payload_json)
     return res
 
+class ValidateWorkflowRequest(BaseModel):
+    payload_json: str
+
+@router.post("/canvas/validate_workflow")
+def validate_workflow(req: ValidateWorkflowRequest):
+    import scripts.node_manager
+    res = scripts.node_manager.api_validate_workflow(req.payload_json)
+    return res
+
 class SaveProjectRequest(BaseModel):
     payload_json: str
     prompt: str = ""

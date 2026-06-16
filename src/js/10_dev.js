@@ -120,14 +120,21 @@ function createDevPanel() {
             const data = await res.json();
             const registry = data.registry || [];
 
+            const resolveTypeName = (t) => {
+                if (!t) return "Unknown";
+                if (typeof t === 'string') return t;
+                if (t.mapping) return t.target ? t.target.type : "Unknown";
+                return t.type || "Unknown";
+            };
+
             let graphStr = "graph TD\n";
             let dataNodes = new Set();
             
             registry.forEach(step => {
                 graphStr += `  step_${step.id}["${step.name}"]\n`;
                 if (step.type_signature) {
-                    (step.type_signature.in || []).forEach(t => dataNodes.add(t));
-                    (step.type_signature.out || []).forEach(t => dataNodes.add(t));
+                    (step.type_signature.in || []).forEach(t => dataNodes.add(resolveTypeName(t)));
+                    (step.type_signature.out || []).forEach(t => dataNodes.add(resolveTypeName(t)));
                 }
             });
             
@@ -139,10 +146,10 @@ function createDevPanel() {
             registry.forEach(step => {
                 if (step.type_signature) {
                     (step.type_signature.in || []).forEach(t => {
-                        graphStr += `  data_${t} --> step_${step.id}\n`;
+                        graphStr += `  data_${resolveTypeName(t)} --> step_${step.id}\n`;
                     });
                     (step.type_signature.out || []).forEach(t => {
-                        graphStr += `  step_${step.id} --> data_${t}\n`;
+                        graphStr += `  step_${step.id} --> data_${resolveTypeName(t)}\n`;
                     });
                 }
             });

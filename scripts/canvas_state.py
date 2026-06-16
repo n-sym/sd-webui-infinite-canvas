@@ -188,11 +188,12 @@ class CanvasState:
                     add_to_zip(state_snapshot["tiles_now"], "canvas_now")
 
                     meta = {
+                        "version": 3,
                         "canvas_bounds": state_snapshot["canvas_bounds"],
                         "workflow": state_snapshot["workflow"],
                         "step_params": state_snapshot["step_params"]
                     }
-                    zip_file.writestr("meta.json", json.dumps(meta, indent=2))
+                    zip_file.writestr("meta.json", json.dumps(meta))
 
                 import os
                 import re

@@ -71,10 +71,14 @@ workflowStyle.textContent = `
         background: var(--background-fill-secondary, rgba(128,128,128,0.1));
         border-radius: 14px;
         border: 1px solid hsla(var(--node-hue), 45%, 55%, 0.5);
+        --ic-border-color: hsla(var(--node-hue), 45%, 55%, 0.5);
+        --ic-glow-color: hsla(var(--node-hue), 60%, 65%, 0.6);
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .dark .ic-sidebar-plugin-card {
         border-color: hsla(var(--node-hue), 45%, 45%, 0.5);
+        --ic-border-color: hsla(var(--node-hue), 45%, 45%, 0.5);
+        --ic-glow-color: hsla(var(--node-hue), 60%, 55%, 0.6);
     }
     .ic-sidebar-plugin-header {
         display: flex;
@@ -85,6 +89,9 @@ workflowStyle.textContent = `
         font-weight: 600;
         font-size: 13px;
         color: hsl(var(--node-hue), 85%, 25%);
+        padding: 6px 8px;
+        margin: -6px -8px;
+        border-radius: 8px;
     }
     .dark .ic-sidebar-plugin-header {
         color: hsl(var(--node-hue), 45%, 80%);
@@ -99,6 +106,7 @@ workflowStyle.textContent = `
         transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
         overflow: hidden;
     }
+
 `;
 document.head.appendChild(workflowStyle);
 
@@ -139,7 +147,7 @@ function renderParamRow(pluginId, param, val) {
             .replace(/"/g, '&quot;');
         return `<div style="margin-bottom: 10px; font-size: 13px; color: var(--body-text-color, #ccc);">
             <div style="margin-bottom: 4px; font-weight: 600;">${t(param.label)}</div>
-            <textarea class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" rows="2" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 11px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s; line-height: 1.4;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight)+'px';" onchange="sendWorkflowUpdate(this)">${escaped}</textarea>
+            <textarea class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" rows="2" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 11px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s; line-height: 1.4;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight + 2)+'px';" onchange="sendWorkflowUpdate(this)">${escaped}</textarea>
         </div>`;
     }
 
@@ -193,11 +201,33 @@ function isGenParam(param) {
     return param.is_generation_param !== false;
 }
 
-function updateWorkflowUI(data, container) {
+async function updateWorkflowUI(data, container) {
     if (!data || !data.registry) return;
 
     const stepParams = data.step_params || {};
     const registry = data.registry || [];
+
+    // Make API call for validation
+    let failed_step_id = null;
+    let error_reason = "";
+    
+    try {
+        const payload = JSON.stringify({
+            step_params: stepParams
+        });
+        const res = await fetch('/infinite-canvas-api/canvas/validate_workflow', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload_json: payload })
+        });
+        const validation = await res.json();
+        if (validation && !validation.valid) {
+            failed_step_id = validation.failed_step_id;
+            error_reason = validation.error_reason;
+        }
+    } catch (e) {
+        console.error("Workflow validation failed:", e);
+    }
 
     // ---- 1. Pipeline node strip (overlay list column only) ----
     const activeSteps = registry.filter(node => {
@@ -207,35 +237,8 @@ function updateWorkflowUI(data, container) {
     });
     activeSteps.sort((a, b) => a.sort_index - b.sort_index);
 
-    let availableTypes = new Set(['SdStyleInput']);
-    let typeErrorStepIndex = -1;
-    let typeErrorReason = "";
+    let hasErrorYet = false;
 
-    for (let i = 0; i < activeSteps.length; i++) {
-        const step = activeSteps[i];
-        const sig = step.type_signature || { in: [], out: [] };
-        const ins = sig.in || [];
-        
-        for (let j = 0; j < ins.length; j++) {
-            if (!availableTypes.has(ins[j])) {
-                typeErrorStepIndex = i;
-                typeErrorReason = `Requires input '${ins[j]}', but it is not provided by any upstream step.`;
-                break;
-            }
-        }
-        if (typeErrorStepIndex !== -1) break;
-        const outs = sig.out || [];
-        outs.forEach(t => availableTypes.add(t));
-    }
-
-    if (typeErrorStepIndex === -1 && !availableTypes.has('FinalOutputImage')) {
-        if (activeSteps.length > 0) {
-            typeErrorStepIndex = activeSteps.length - 1;
-            typeErrorReason = "Pipeline does not output 'FinalOutputImage' at the end.";
-        }
-    }
-
-    let activeStepCounter = 0;
     let html = `<div style="display: flex; flex-direction: column; gap: 8px;">`;
     registry.forEach(node => {
         const hue = node.sort_index % 360;
@@ -246,14 +249,12 @@ function updateWorkflowUI(data, container) {
         }
 
         if (isActive) {
-            let hasError = false;
-            let errorText = "";
-            if (typeErrorStepIndex !== -1 && activeStepCounter >= typeErrorStepIndex) {
-                hasError = true;
-                errorText = typeErrorReason;
+            if (node.id === failed_step_id) {
+                hasErrorYet = true;
             }
+            let hasError = hasErrorYet;
+            let errorText = hasError ? error_reason : "";
             html += createNodeHtml(t(node.name), hue, hasError, errorText);
-            activeStepCounter++;
         }
     });
     html += `</div>`;
@@ -264,8 +265,8 @@ function updateWorkflowUI(data, container) {
     registry.forEach(plugin => {
         if (!plugin.is_plugin) return;
 
-        settingsHtml += `<div class="ic-plugin-setting-group fluent-card" style="margin-bottom: 10px; padding: 12px; background: var(--background-fill-secondary, rgba(128,128,128,0.1)); border-radius: 16px; cursor: pointer; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2));" onclick="if(event.target.closest('input') || event.target.closest('select')) return; const cb = this.querySelector('input[data-param-name=\\'enabled\\']'); if(cb) cb.click();">`;
-        settingsHtml += `<div class="fluent-content" style="width:100%; height:100%;">`;
+        const hue = plugin.sort_index % 360;
+        settingsHtml += `<div class="ic-plugin-setting-group ic-sidebar-plugin-card fluent-card" style="--node-hue: ${hue}; cursor: pointer; display: block;" onclick="if(event.target.closest('input') || event.target.closest('select') || event.target.closest('.ic_plugin_params_${plugin.id}')) return; const cb = this.querySelector('input[data-param-name=\\'enabled\\']'); if(cb) cb.click();">`;
         const pValues = stepParams[plugin.id] || {};
 
         let isPluginEnabled = true;
@@ -274,10 +275,10 @@ function updateWorkflowUI(data, container) {
             isPluginEnabled = pValues['enabled'] !== undefined ? pValues['enabled'] : enabledParam.default;
         }
 
-        settingsHtml += `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">`;
-        settingsHtml += `<div style="font-weight: 600; font-size: 14px; color: var(--body-text-color, #fff);">${t(plugin.name)}</div>`;
+        settingsHtml += `<div class="ic-sidebar-plugin-header" style="margin-bottom: 8px;">`;
+        settingsHtml += `<span>${t(plugin.name)}</span>`;
         if (enabledParam) {
-            settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="enabled" ${isPluginEnabled ? 'checked' : ''} style="cursor: pointer;" onchange="const wraps = document.querySelectorAll('.ic_plugin_params_${plugin.id}'); wraps.forEach(w => { w.style.maxHeight = this.checked ? '1000px' : '0px'; w.style.opacity = this.checked ? '1' : '0'; }); sendWorkflowUpdate(this)" />`;
+            settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="enabled" ${isPluginEnabled ? 'checked' : ''} style="cursor: pointer;" onchange="const wraps = document.querySelectorAll('.ic_plugin_params_${plugin.id}'); wraps.forEach(w => { w.style.gridTemplateRows = this.checked ? '1fr' : '0fr'; w.style.opacity = this.checked ? '1' : '0'; }); sendWorkflowUpdate(this)" />`;
         }
         settingsHtml += `</div>`;
 
@@ -293,11 +294,12 @@ function updateWorkflowUI(data, container) {
         });
 
         if (settingsBody) {
-            settingsHtml += `<div class="ic_plugin_params_${plugin.id}" style="transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: hidden; max-height: ${isPluginEnabled ? '1000px' : '0px'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
+            settingsHtml += `<div class="ic_plugin_params_${plugin.id}" style="display: grid; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; grid-template-rows: ${isPluginEnabled ? '1fr' : '0fr'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
+            settingsHtml += `<div style="min-height: 0; overflow: hidden;">`;
             settingsHtml += settingsBody;
-            settingsHtml += `</div>`;
+            settingsHtml += `</div></div>`;
         }
-        settingsHtml += `</div></div>`;
+        settingsHtml += `</div>`;
     });
     settingsHtml += `</div>`;
 
@@ -326,16 +328,17 @@ function updateWorkflowUI(data, container) {
         if (!genBody) return; // pure-toggle plugin → skip sidebar
 
         const hue = plugin.sort_index % 360;
-        sidebarHtml += `<div class="ic-sidebar-plugin-card" style="--node-hue: ${hue};">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-card fluent-card" style="--node-hue: ${hue}; cursor: pointer;" onclick="if(event.target.closest('.ic-sidebar-plugin-wrap')) return; (function(c){const w=c.querySelector('.ic-sidebar-plugin-wrap');const ch=c.querySelector('.ic-sidebar-plugin-chevron');const open=w.style.gridTemplateRows!=='0fr';w.style.gridTemplateRows=open?'0fr':'1fr';w.style.opacity=open?'0':'1';ch.style.transform=open?'rotate(-90deg)':'rotate(0deg)';})(this)">`;
         // Header: click toggles collapse (NOT enabled). Chevron rotates.
-        sidebarHtml += `<div class="ic-sidebar-plugin-header" onclick="(function(h){const b=h.nextElementSibling;const c=h.querySelector('.ic-sidebar-plugin-chevron');const open=b.style.maxHeight!=='0px';b.style.maxHeight=open?'0px':'1000px';b.style.opacity=open?'0':'1';c.style.transform=open?'rotate(-90deg)':'rotate(0deg)';})(this)">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-header">`;
         sidebarHtml += `<span>${t(plugin.name)}</span>`;
         sidebarHtml += `<svg class="ic-sidebar-plugin-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(0deg);"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
         sidebarHtml += `</div>`;
         // Body (expanded by default)
-        sidebarHtml += `<div class="ic-sidebar-plugin-body" style="max-height: 1000px; opacity: 1; padding-top: 8px;">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-wrap" style="display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; opacity: 1;">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-body" style="min-height: 0; overflow: hidden; padding-top: 8px;">`;
         sidebarHtml += genBody;
-        sidebarHtml += `</div>`;
+        sidebarHtml += `</div></div>`;
         sidebarHtml += `</div>`;
     });
 
@@ -354,7 +357,7 @@ function updateWorkflowUI(data, container) {
         if (!root) return;
         root.querySelectorAll('textarea.ic-node-param').forEach(ta => {
             ta.style.height = 'auto';
-            ta.style.height = Math.max(32, ta.scrollHeight) + 'px';
+            ta.style.height = Math.max(32, ta.scrollHeight + 2) + 'px';
         });
     };
     _autosize(container);

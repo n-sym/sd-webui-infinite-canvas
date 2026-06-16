@@ -11,6 +11,14 @@
         let showEdgeMask = false;
         let featherRadius = 0;
         
+        let cachedPatchCanvas = null;
+        let lastPatchSource = null;
+        let lastMaskSource = null;
+        let lastFeatherRadius = -1;
+        
+        let cachedHighlightCanvas = null;
+        let lastEdgeMaskSource = null;
+        
 
         
         // Setup Feather slider
@@ -226,17 +234,23 @@
                         if (pendingUpdate && pendingUpdate.transform) {
                             const t = pendingUpdate.transform;
                             
-                            const patchCanvas = document.createElement('canvas');
-                            patchCanvas.width = pendingPatchImage.width;
-                            patchCanvas.height = pendingPatchImage.height;
-                            const pctx = patchCanvas.getContext('2d');
-                            
-                            pctx.drawImage(pendingPatchImage, 0, 0);
-                            pctx.globalCompositeOperation = 'destination-in';
-                            if (featherRadius > 0) {
-                                pctx.filter = `blur(${featherRadius}px)`;
+                            if (!cachedPatchCanvas || lastPatchSource !== pendingPatchImage.src || lastMaskSource !== pendingMaskImage.src || lastFeatherRadius !== featherRadius) {
+                                cachedPatchCanvas = document.createElement('canvas');
+                                cachedPatchCanvas.width = pendingPatchImage.width;
+                                cachedPatchCanvas.height = pendingPatchImage.height;
+                                const pctx = cachedPatchCanvas.getContext('2d');
+                                
+                                pctx.drawImage(pendingPatchImage, 0, 0);
+                                pctx.globalCompositeOperation = 'destination-in';
+                                if (featherRadius > 0) {
+                                    pctx.filter = `blur(${featherRadius}px)`;
+                                }
+                                pctx.drawImage(pendingMaskImage, 0, 0);
+                                
+                                lastPatchSource = pendingPatchImage.src;
+                                lastMaskSource = pendingMaskImage.src;
+                                lastFeatherRadius = featherRadius;
                             }
-                            pctx.drawImage(pendingMaskImage, 0, 0);
                             
                             const rx = t.rect_x;
                             const ry = t.rect_y;
@@ -247,20 +261,27 @@
                             mctx.translate(cx, cy);
                             mctx.rotate(sourceRect.angle || 0);
                             
-                            mctx.drawImage(patchCanvas, -pendingPatchImage.width / 2, -pendingPatchImage.height / 2);
+                            mctx.drawImage(cachedPatchCanvas, -pendingPatchImage.width / 2, -pendingPatchImage.height / 2);
                             
-                            if (showEdgeMask && pendingEdgeMaskImage.complete) {
-                                mctx.save();
-                                const highlightCanvas = document.createElement('canvas');
-                                highlightCanvas.width = pendingEdgeMaskImage.width;
-                                highlightCanvas.height = pendingEdgeMaskImage.height;
-                                const hctx = highlightCanvas.getContext('2d');
-                                hctx.fillStyle = 'rgba(255, 60, 60, 0.9)'; // brighter red highlight
-                                hctx.fillRect(0, 0, highlightCanvas.width, highlightCanvas.height);
-                                hctx.globalCompositeOperation = 'destination-in';
-                                hctx.drawImage(pendingEdgeMaskImage, 0, 0);
+                            if (showEdgeMask && pendingEdgeMaskImage.complete && pendingEdgeMaskImage.naturalWidth > 0) {
+                                if (!cachedHighlightCanvas || lastEdgeMaskSource !== pendingEdgeMaskImage.src) {
+                                    cachedHighlightCanvas = document.createElement('canvas');
+                                    cachedHighlightCanvas.width = pendingEdgeMaskImage.width;
+                                    cachedHighlightCanvas.height = pendingEdgeMaskImage.height;
+                                    const hctx = cachedHighlightCanvas.getContext('2d');
+                                    hctx.drawImage(pendingEdgeMaskImage, 0, 0);
+                                    hctx.globalCompositeOperation = 'source-in';
+                                    hctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                                    hctx.fillRect(0, 0, cachedHighlightCanvas.width, cachedHighlightCanvas.height);
+                                    lastEdgeMaskSource = pendingEdgeMaskImage.src;
+                                }
                                 
-                                mctx.drawImage(highlightCanvas, -pendingPatchImage.width / 2, -pendingPatchImage.height / 2);
+                                mctx.save();
+                                const ecx = rx + pendingEdgeMaskImage.width / 2;
+                                const ecy = ry + pendingEdgeMaskImage.height / 2;
+                                mctx.translate(ecx, ecy);
+                                mctx.rotate(sourceRect.angle || 0);
+                                mctx.drawImage(cachedHighlightCanvas, -pendingEdgeMaskImage.width / 2, -pendingEdgeMaskImage.height / 2);
                                 mctx.restore();
                             }
                             
@@ -304,7 +325,7 @@
                 const worldMouseX = previewCenterX + (sx - mc.width/2) / previewScale;
                 const worldMouseY = previewCenterY + (sy - mc.height/2) / previewScale;
                 
-                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                const zoomFactor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
                 previewScale *= zoomFactor;
                 
                 previewCenterX = worldMouseX - (sx - mc.width/2) / previewScale;

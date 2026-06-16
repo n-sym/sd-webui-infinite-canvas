@@ -1,6 +1,7 @@
 from typing import Any, Dict
 import copy
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 class SecondPassStep(GenerationStep):
     id = "second_pass"
@@ -10,7 +11,7 @@ class SecondPassStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["SdProcessing", "GeneratedImage"], "out": ["SdProcessing", "GeneratedImage"]}
+        return {"in": [SdProcessing, GeneratedImage], "out": [SdProcessing, GeneratedImage]}
     
     @classmethod
     def get_params(cls):
@@ -45,10 +46,16 @@ class SecondPassStep(GenerationStep):
         if not ctx.var.get("enabled", False):
             return ctx
             
+        p_obj = ctx.get(SdProcessing)
+        result_img = ctx.get(GeneratedImage)
+        
+        if not p_obj or not result_img:
+            return ctx
+            
         from scripts.sd_upscale import SDUpscale
         
         # Clone processing object to avoid messing up the original params
-        p = copy.copy(ctx.p)
+        p = copy.copy(p_obj)
         
         # If the original processing was Txt2Img (e.g. starting from an empty canvas), 
         # SD Upscale ignores init_images and denoising_strength. We must cast it to Img2Img.
@@ -75,7 +82,7 @@ class SecondPassStep(GenerationStep):
             p.init_latent = None
 
         # Configure new parameters
-        p.init_images = [ctx.result_img]
+        p.init_images = [result_img]
         p.batch_size = ctx.var.get("tile_batch_size", 1)
         p.steps = ctx.var["steps"]
         p.denoising_strength = ctx.var["denoising_strength"]
@@ -95,7 +102,7 @@ class SecondPassStep(GenerationStep):
         )
         
         if processed and processed.images:
-            ctx.result_img = processed.images[0]
-            print(f"[Second Pass] Completed SD Upscale. Final resolution: {ctx.result_img.size}")
+            ctx.set(GeneratedImage, processed.images[0])
+            print(f"[Second Pass] Completed SD Upscale. Final resolution: {processed.images[0].size}")
             
         return ctx

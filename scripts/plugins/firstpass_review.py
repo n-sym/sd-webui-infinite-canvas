@@ -3,6 +3,7 @@ import base64
 from io import BytesIO
 from typing import Any, Dict
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 def image_to_base64(img):
     buffered = BytesIO()
@@ -17,7 +18,7 @@ class FirstPassReviewStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["GeneratedImage"], "out": ["GeneratedImage"]}
+        return {"in": [GeneratedImage], "out": [GeneratedImage]}
     
     @classmethod
     def get_params(cls):
@@ -34,10 +35,11 @@ class FirstPassReviewStep(GenerationStep):
         if not ctx.var.get("enabled", False):
             return ctx
             
-        if not ctx.result_img:
+        result_img = ctx.get(GeneratedImage)
+        if not result_img:
             return ctx
             
-        img_b64 = image_to_base64(ctx.result_img)
+        img_b64 = image_to_base64(result_img)
             
         html_content = f"""
         <div style="margin-bottom:15px; text-align: center;">

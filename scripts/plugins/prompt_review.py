@@ -1,6 +1,7 @@
 import json
 from typing import Any, Dict
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 class PromptReviewStep(GenerationStep):
     id = "prompt_review"
@@ -10,7 +11,7 @@ class PromptReviewStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["Prompt"], "out": ["Prompt"]}
+        return {"in": [Prompt], "out": [Prompt]}
     
     @classmethod
     def get_params(cls):
@@ -27,14 +28,17 @@ class PromptReviewStep(GenerationStep):
         if not ctx.var.get("enabled", False):
             return ctx
             
+        prompt = ctx.get(Prompt) or ""
+        negative_prompt = ctx.get(NegativePrompt) or ""
+            
         html_content = f"""
         <div style="margin-bottom:15px;">
             <label style="display:block; font-weight:bold; margin-bottom:8px; color:var(--body-text-color, #fff); opacity:0.9;">Positive Prompt</label>
-            <textarea id="ic_dyn_prompt" rows="4" style="width:100%; box-sizing:border-box; padding:12px; border-radius:8px; background:var(--input-background-fill, rgba(0,0,0,0.1)); color:var(--body-text-color, #fff); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); outline:none; font-family:inherit; resize:vertical; transition:border 0.2s;">{ctx.prompt}</textarea>
+            <textarea id="ic_dyn_prompt" rows="4" style="width:100%; box-sizing:border-box; padding:12px; border-radius:8px; background:var(--input-background-fill, rgba(0,0,0,0.1)); color:var(--body-text-color, #fff); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); outline:none; font-family:inherit; resize:vertical; transition:border 0.2s;">{prompt}</textarea>
         </div>
         <div style="margin-bottom:24px;">
             <label style="display:block; font-weight:bold; margin-bottom:8px; color:var(--body-text-color, #fff); opacity:0.9;">Negative Prompt</label>
-            <textarea id="ic_dyn_negative" rows="3" style="width:100%; box-sizing:border-box; padding:12px; border-radius:8px; background:var(--input-background-fill, rgba(0,0,0,0.1)); color:var(--body-text-color, #fff); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); outline:none; font-family:inherit; resize:vertical; transition:border 0.2s;">{ctx.negative_prompt}</textarea>
+            <textarea id="ic_dyn_negative" rows="3" style="width:100%; box-sizing:border-box; padding:12px; border-radius:8px; background:var(--input-background-fill, rgba(0,0,0,0.1)); color:var(--body-text-color, #fff); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); outline:none; font-family:inherit; resize:vertical; transition:border 0.2s;">{negative_prompt}</textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:12px;">
             <button id="ic_dyn_cancel" style="padding:0 20px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:40px; background:var(--button-secondary-background-fill, rgba(255,255,255,0.1)); color:var(--button-secondary-text-color, var(--body-text-color, #fff)); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;">Cancel Generation</button>

@@ -41,7 +41,8 @@ def build_js():
 
 
 sam2_model = None
-from scripts.pipeline_types import GenerationCtx, GenerationStep
+from scripts.pipeline_types import GenerationCtx, GenerationStep, SamplerConfigData, ResolutionData, CanvasConfigData
+from scripts.typing_system import *
 from scripts.plugins.llm_prompt_optimize import LLMPromptOptimizeStep
 from scripts.plugins.append_close_up import AppendCloseUpStep
 from scripts.plugins.prompt_review import PromptReviewStep
@@ -63,7 +64,7 @@ def pause_generation_and_show_dynamic_dialog(ctx: GenerationCtx, title: str, htm
         "html": html_content,
         "js": js_code
     }
-    ctx.final_payload = json.dumps(payload)
+    ctx.set(FinalPayload, json.dumps(payload))
     return ctx
 
 class ParseInputStep(GenerationStep):
@@ -73,7 +74,7 @@ class ParseInputStep(GenerationStep):
 
     @classmethod
     def type_signature(cls):
-        return {"in": ["SdStyleInput"], "out": ["Prompt", "SamplerConfig", "Resolution", "InputImage", "InputMask"]}
+        return {"in": [SdStyleInput], "out": [Prompt, SamplerConfig, Resolution, InputImage, InputMask]}
 
     @classmethod
     def get_params(cls):
@@ -156,30 +157,40 @@ class ParseInputStep(GenerationStep):
         ctx.mask_base64 = data.get('mask_base64', '')
 
         # Resolve parse_input's own params (the generation scalars) and write
-        # them back onto ctx.<field> so every downstream step/plugin keeps
-        # reading ctx.prompt / ctx.steps / etc. unchanged.
+        # them as TypedRecords onto the GenerationCtx.
         payload_step_params = data.get("step_params", {})
         resolved = ParseInputStep.resolve_params(payload_step_params.get('parse_input', {}))
         ctx.step_params['parse_input'] = resolved
         ctx.var = resolved
-        ctx.prompt = resolved['prompt']
-        ctx.negative_prompt = resolved['negative_prompt']
-        ctx.steps = resolved['steps']
-        ctx.cfg_scale = resolved['cfg_scale']
-        ctx.shift = resolved['shift']
-        ctx.denoising_strength = resolved['denoising_strength']
-        ctx.sampler_name = resolved['sampler_name']
-        ctx.scheduler = resolved['scheduler']
-        ctx.gen_width = resolved['gen_width']
-        ctx.gen_height = resolved['gen_height']
-        ctx.seed = resolved['seed']
-        ctx.outpaint_pad = resolved['outpaint_pad']
-        ctx.inpainting_fill = resolved['inpainting_fill']
-        ctx.upscaler_name = resolved['upscaler_name']
-        ctx.auto_scale = resolved['auto_scale']
-        ctx.downscale_algo = resolved['downscale_algo']
-        ctx.compile_preset = resolved['compile_preset']
-        ctx.generation_res = max(ctx.gen_width, ctx.gen_height)
+        
+        ctx.set(Prompt, resolved['prompt'])
+        ctx.set(NegativePrompt, resolved['negative_prompt'])
+        ctx.set(SamplerConfig, SamplerConfigData(
+            steps=resolved['steps'],
+            cfg_scale=resolved['cfg_scale'],
+            shift=resolved['shift'],
+            denoising_strength=resolved['denoising_strength'],
+            sampler_name=resolved['sampler_name'],
+            scheduler=resolved['scheduler'],
+            seed=resolved['seed']
+        ))
+        ctx.set(Resolution, ResolutionData(
+            gen_width=resolved['gen_width'],
+            gen_height=resolved['gen_height'],
+            generation_res=max(resolved['gen_width'], resolved['gen_height'])
+        ))
+        ctx.set(CanvasConfig, CanvasConfigData(
+            outpaint_pad=resolved['outpaint_pad'],
+            inpainting_fill=resolved['inpainting_fill'],
+            upscaler_name=resolved['upscaler_name'],
+            auto_scale=resolved['auto_scale'],
+            downscale_algo=resolved['downscale_algo'],
+            compile_preset=resolved['compile_preset']
+        ))
+        
+        ctx.set(SourceRect, data.get('source_rect', {}))
+        ctx.set(TargetRect, data.get('target_rect', {}))
+        ctx.set(MaskBase64, data.get('mask_base64', ''))
 
         ctx.workflow = data.get("workflow", [])
 
@@ -204,27 +215,30 @@ class PrepareCanvasStep(GenerationStep):
 
     @classmethod
     def type_signature(cls):
-        return {"in": ["InputImage", "InputMask", "Resolution"], "out": ["InputImage", "InputMask"]}
+        return {"in": [InputImage, InputMask, Resolution], "out": [InputImage, InputMask]}
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
+        cc = ctx.get(CanvasConfig)
+        res = ctx.get(Resolution)
+        
         prep_info = canvas_state.prepare_generation(
-            ctx.source_rect, ctx.target_rect, 
-            generation_res=ctx.generation_res, 
-            upscaler_name=ctx.upscaler_name, 
-            mask_base64=ctx.mask_base64, 
-            auto_scale=ctx.auto_scale, 
-            outpaint_pad=ctx.outpaint_pad
+            ctx.get(SourceRect), ctx.get(TargetRect), 
+            generation_res=res.generation_res, 
+            upscaler_name=cc.upscaler_name, 
+            mask_base64=ctx.get(MaskBase64), 
+            auto_scale=cc.auto_scale, 
+            outpaint_pad=cc.outpaint_pad
         )
         if not prep_info:
-            ctx.final_payload = json.dumps(canvas_state.get_tiles_payload())
-            ctx.is_error = True # Stop pipeline without throwing an error
+            ctx.set(FinalPayload, json.dumps(canvas_state.get_tiles_payload()))
+            ctx.set(SoftStop, True) # Stop pipeline without throwing an error
             return ctx
             
-        ctx.prep_info = prep_info
-        ctx.init_image = prep_info['image']
-        ctx.mask = prep_info['mask']
-        ctx.paste_mask = prep_info.get('paste_mask', ctx.mask)
-        ctx.canvas_source_rect = prep_info['canvas_source_rect']
+        ctx.set(PreparedCanvas, prep_info)
+        ctx.set(InputImage, prep_info['image'])
+        ctx.set(InputMask, prep_info['mask'])
+        ctx.set(PasteMask, prep_info.get('paste_mask', prep_info['mask']))
+        ctx.set(CanvasSourceRect, prep_info['canvas_source_rect'])
         
         if prep_info.get('is_empty_canvas', False):
             print("[Infinite Canvas] Blank canvas detected. Will use txt2img processing.")
@@ -242,32 +256,41 @@ class SetupProcessingStep(GenerationStep):
 
     @classmethod
     def type_signature(cls):
-        return {"in": ["Prompt", "SamplerConfig", "Resolution", "InputImage", "InputMask"], "out": ["SdProcessing"]}
+        return {"in": [Prompt, SamplerConfig, Resolution, InputImage, InputMask], "out": [SdProcessing]}
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        if ctx.prep_info.get('is_empty_canvas', False):
+        prep = ctx.get(PreparedCanvas)
+        prompt = ctx.get(Prompt)
+        neg = ctx.get(NegativePrompt)
+        sc = ctx.get(SamplerConfig)
+        res = ctx.get(Resolution)
+        init_img = ctx.get(InputImage)
+        mask = ctx.get(InputMask)
+        cc = ctx.get(CanvasConfig)
+        
+        if prep.get('is_empty_canvas', False):
             p = processing.StableDiffusionProcessingTxt2Img(
                 sd_model=shared.sd_model,
                 outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_txt2img_samples,
                 outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_txt2img_grids,
-                prompt=ctx.prompt,
-                negative_prompt=ctx.negative_prompt,
+                prompt=prompt,
+                negative_prompt=neg,
                 styles=[],
-                seed=ctx.seed,
+                seed=sc.seed,
                 subseed=-1,
                 subseed_strength=0,
                 seed_resize_from_h=0,
                 seed_resize_from_w=0,
                 seed_enable_extras=False,
-                sampler_name=ctx.sampler_name,
-                scheduler=ctx.scheduler,
+                sampler_name=sc.sampler_name,
+                scheduler=sc.scheduler,
                 batch_size=1,
                 n_iter=1,
-                steps=ctx.steps,
-                cfg_scale=ctx.cfg_scale,
-                distilled_cfg_scale=ctx.shift,
-                width=ctx.gen_width,
-                height=ctx.gen_height,
+                steps=sc.steps,
+                cfg_scale=sc.cfg_scale,
+                distilled_cfg_scale=sc.shift,
+                width=res.gen_width,
+                height=res.gen_height,
                 restore_faces=False,
                 tiling=False,
             )
@@ -276,52 +299,53 @@ class SetupProcessingStep(GenerationStep):
                 sd_model=shared.sd_model,
                 outpath_samples=shared.opts.outdir_samples or shared.opts.outdir_img2img_samples,
                 outpath_grids=shared.opts.outdir_grids or shared.opts.outdir_img2img_grids,
-                prompt=ctx.prompt,
-                negative_prompt=ctx.negative_prompt,
+                prompt=prompt,
+                negative_prompt=neg,
                 styles=[],
-                seed=ctx.seed,
+                seed=sc.seed,
                 subseed=-1,
                 subseed_strength=0,
                 seed_resize_from_h=0,
                 seed_resize_from_w=0,
                 seed_enable_extras=False,
-                sampler_name=ctx.sampler_name,
-                scheduler=ctx.scheduler,
+                sampler_name=sc.sampler_name,
+                scheduler=sc.scheduler,
                 batch_size=1,
                 n_iter=1,
-                steps=ctx.steps,
-                cfg_scale=ctx.cfg_scale,
-                distilled_cfg_scale=ctx.shift,
-                width=ctx.gen_width,
-                height=ctx.gen_height,
+                steps=sc.steps,
+                cfg_scale=sc.cfg_scale,
+                distilled_cfg_scale=sc.shift,
+                width=res.gen_width,
+                height=res.gen_height,
                 restore_faces=False,
                 tiling=False,
-                init_images=[ctx.init_image],
-                mask=ctx.mask,
+                init_images=[init_img],
+                mask=mask,
                 mask_blur=4,
-                inpainting_fill=["fill", "original", "latent noise", "latent nothing"].index(ctx.inpainting_fill) if ctx.inpainting_fill in ["fill", "original", "latent noise", "latent nothing"] else 1,
+                inpainting_fill=["fill", "original", "latent noise", "latent nothing"].index(cc.inpainting_fill) if cc.inpainting_fill in ["fill", "original", "latent noise", "latent nothing"] else 1,
                 resize_mode=0,
-                denoising_strength=ctx.denoising_strength,
+                denoising_strength=sc.denoising_strength,
                 image_cfg_scale=None,
                 inpaint_full_res=False,
                 inpaint_full_res_padding=0,
                 inpainting_mask_invert=0,
             )
         p.script_args = (float(ctx.step_params.get("latent_blend", {}).get("power", 1.0)), )
-        p.extra_generation_params["IC Upscaler"] = ctx.upscaler_name
-        p.extra_generation_params["IC Auto Scale"] = ctx.auto_scale
-        ctx.p = p
+        p.extra_generation_params["IC Upscaler"] = cc.upscaler_name
+        p.extra_generation_params["IC Auto Scale"] = cc.auto_scale
+        ctx.set(SdProcessing, p)
         
         # Prepare edge masks
         edge_fix_params = ctx.step_params.get("edge_fix", {})
         latent_blend_params = ctx.step_params.get("latent_blend", {})
         if edge_fix_params.get("enabled", False) or latent_blend_params.get("enabled", False):
-            ctx.mask_gen_size_arr = cv2.resize(np.array(ctx.mask), (ctx.gen_width, ctx.gen_height), interpolation=cv2.INTER_NEAREST)
+            ctx.set(MaskGenSizeArr, cv2.resize(np.array(mask), (res.gen_width, res.gen_height), interpolation=cv2.INTER_NEAREST))
             
         return ctx
 
 def ic_process_images(p, ctx):
-    compile_preset = getattr(ctx, "compile_preset", "Disable")
+    cc = ctx.get(CanvasConfig)
+    compile_preset = cc.compile_preset if cc else "Disable"
     if compile_preset != "Disable":
         try:
             actual_preset = compile_preset
@@ -369,24 +393,25 @@ class FirstPassStep(GenerationStep):
 
     @classmethod
     def type_signature(cls):
-        return {"in": ["SdProcessing"], "out": ["GeneratedImage", "Error"]}
+        return {"in": [SdProcessing], "out": [GeneratedImage, Error]}
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        processed = ic_process_images(ctx.p, ctx)
+        p = ctx.get(SdProcessing)
+        processed = ic_process_images(p, ctx)
 
         # Capture the seed Forge actually sampled (when the user passed -1,
         # Forge generates one). Exposed via the payload so the frontend's
         # "reuse seed" button can replay it.
         try:
-            ctx.used_seed = int(processed.seed)
+            ctx.set(UsedSeed, int(processed.seed))
         except Exception:
-            ctx.used_seed = None
+            pass
 
         if processed.images:
-            ctx.result_img = processed.images[0]
+            ctx.set(GeneratedImage, processed.images[0])
         else:
-            ctx.is_error = True
-            ctx.error_message = "No images returned from first pass."
+            ctx.set(Error, "No images returned from first pass.")
+
         return ctx
 
 
@@ -400,14 +425,22 @@ class FinalizeStateStep(GenerationStep):
 
     @classmethod
     def type_signature(cls):
-        return {"in": ["GeneratedImage"], "out": ["FinalOutputImage"]}
+        return {"in": [GeneratedImage], "out": [FinalOutputImage]}
 
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
-        if not ctx.result_img:
+        result_img = ctx.get(GeneratedImage)
+        if not result_img:
             return ctx
             
-        edge_fix_mask_img = Image.fromarray(ctx.blured_edge_mask_arr) if ctx.blured_edge_mask_arr is not None else None
-        canvas_state.set_pending_result(ctx.result_img, ctx.canvas_source_rect, ctx.paste_mask, ctx.downscale_algo, edge_fix_mask=edge_fix_mask_img)
+        blured = ctx.get(BluredEdgeMaskArr)
+        edge_fix_mask_img = Image.fromarray(blured) if blured is not None else None
+        
+        cc = ctx.get(CanvasConfig)
+        csr = ctx.get(CanvasSourceRect)
+        paste_mask = ctx.get(PasteMask)
+        prep = ctx.get(PreparedCanvas)
+        
+        canvas_state.set_pending_result(result_img, csr, paste_mask, cc.downscale_algo, edge_fix_mask=edge_fix_mask_img)
         
         def to_b64(img):
             buffered = BytesIO()
@@ -423,21 +456,22 @@ class FinalizeStateStep(GenerationStep):
         payload["patch"] = patch_b64
         payload["mask"] = mask_b64
         payload["transform"] = {
-            "scale": ctx.prep_info['transform']['scale'],
-            "pad_left": ctx.prep_info['transform']['pad_left'],
-            "pad_top": ctx.prep_info['transform']['pad_top'],
-            "rect_x": ctx.canvas_source_rect['x'],
-            "rect_y": ctx.canvas_source_rect['y']
+            "scale": prep['transform']['scale'],
+            "pad_left": prep['transform']['pad_left'],
+            "pad_top": prep['transform']['pad_top'],
+            "rect_x": csr['x'],
+            "rect_y": csr['y']
         }
         if edge_mask_b64:
             payload["edge_mask"] = edge_mask_b64
 
         # Surface the seed Forge actually used so the frontend can offer a
         # "reuse seed" action (re-applies this value to the seed input).
-        if getattr(ctx, "used_seed", None) is not None:
-            payload["used_seed"] = ctx.used_seed
+        used_seed = ctx.get(UsedSeed)
+        if used_seed is not None:
+            payload["used_seed"] = used_seed
 
-        ctx.final_payload = json.dumps(payload)
+        ctx.set(FinalPayload, json.dumps(payload))
         return ctx
 
 
@@ -517,8 +551,18 @@ def handle_upload(img):
 def api_list_projects():
     if not os.path.exists(canvas_state.projects_dir):
         return []
-    projects = [f[:-10] for f in os.listdir(canvas_state.projects_dir) if f.endswith(".infcanvas")]
-    return sorted(projects)
+    
+    infcanvas_names = set()
+    png_names = set()
+    
+    for f in os.listdir(canvas_state.projects_dir):
+        if f.endswith(".infcanvas"):
+            infcanvas_names.add(f[:-10])
+        elif f.lower().endswith(".png"):
+            png_names.add(f[:-4])
+            
+    all_projects = infcanvas_names.union(png_names)
+    return sorted(list(all_projects))
 
 def api_list_projects_json():
     import json, os
@@ -526,13 +570,24 @@ def api_list_projects_json():
         return json.dumps([])
     
     projects = []
+    infcanvas_names = set()
+    
     for f in os.listdir(canvas_state.projects_dir):
         if f.endswith(".infcanvas"):
             p_name = f[:-10]
+            infcanvas_names.add(p_name)
             p_path = os.path.join(canvas_state.projects_dir, f)
             p_time = os.path.getmtime(p_path)
             projects.append({"name": p_name, "mtime": p_time})
             
+    for f in os.listdir(canvas_state.projects_dir):
+        if f.lower().endswith(".png"):
+            p_name = f[:-4]
+            if p_name not in infcanvas_names:
+                p_path = os.path.join(canvas_state.projects_dir, f)
+                p_time = os.path.getmtime(p_path)
+                projects.append({"name": p_name, "mtime": p_time})
+                
     projects.sort(key=lambda x: x["mtime"], reverse=True)
     return json.dumps(projects)
 
@@ -554,24 +609,8 @@ def api_save_project(payload_json, p_prompt, p_neg, p_steps, p_cfg, p_shift, p_d
         print(f"[Infinite Canvas] Failed to broadcast save-start: {e}")
 
     meta = {
-        "version": 2,
+        "version": 3,
         "viewport": viewport,
-        "prompt": p_prompt,
-        "negative_prompt": p_neg,
-        "steps": p_steps,
-        "cfg_scale": p_cfg,
-        "shift": p_shift,
-        "denoising_strength": p_denoise,
-        "sampler_name": p_sampler,
-        "scheduler": p_scheduler,
-        "gen_width": p_w,
-        "gen_height": p_h,
-        "seed": p_seed,
-        "inpainting_fill": p_fill,
-        "outpaint_pad": p_outpaint_pad,
-        "upscaler_name_input": p_up,
-        "downscale_algo_input": p_down,
-        "auto_scale": p_auto_scale,
         "workflow": canvas_state.workflow,
         "step_params": canvas_state.step_params if canvas_state.step_params else {}
     }
@@ -746,6 +785,60 @@ def _load_zip_into_canvas_state(filepath):
 
     return meta, mask_b64
 
+def _load_png_into_canvas_state(filepath):
+    import json
+    from PIL import Image
+    import math
+    from modules import images
+    from modules.infotext_utils import parse_generation_parameters
+    
+    meta = {}
+    mask_b64 = ""
+    
+    img = Image.open(filepath)
+    geninfo, items = images.read_info_from_image(img)
+    if geninfo:
+        params = parse_generation_parameters(geninfo)
+        
+        meta["prompt"] = params.get("Prompt", "")
+        meta["negative_prompt"] = params.get("Negative prompt", "")
+        if "Steps" in params: meta["steps"] = params["Steps"]
+        if "CFG scale" in params: meta["cfg_scale"] = params["CFG scale"]
+        if "Sampler" in params: meta["sampler_name"] = params["Sampler"]
+        if "Seed" in params: meta["seed"] = params["Seed"]
+        if "Denoising strength" in params: meta["denoising_strength"] = params["Denoising strength"]
+        
+    w, h = img.size
+    meta["gen_width"] = w
+    meta["gen_height"] = h
+
+    meta["version"] = 2
+    meta["workflow"] = []
+    meta["step_params"] = {
+        "edge_fix": {"enabled": False, "power": 1.0},
+        "latent_blend": {"enabled": False, "power": 1.0}
+    }
+    
+    canvas_state.update_workflow(meta.get("workflow", []), meta.get("step_params", {}))
+
+    mode = "RGBA"
+    if img.mode != mode:
+        img = img.convert(mode)
+    
+    tiles_dict = {}
+    for ty in range(math.ceil(h/1024)):
+        for tx in range(math.ceil(w/1024)):
+            crop = img.crop((tx*1024, ty*1024, (tx+1)*1024, (ty+1)*1024))
+            tiles_dict[(tx, ty)] = crop
+
+    canvas_state.tiles = tiles_dict
+    canvas_state.tiles_prev = None
+    canvas_state.tiles_now = None
+    canvas_state.canvas_bounds = {"x": 0, "y": 0, "w": w, "h": h}
+    
+    return meta, mask_b64
+
+
 def api_load_project(p_name, recover_autosave=False, *args):
     print(f"[DEBUG] api_load_project called with p_name: '{p_name}', recover_autosave: {recover_autosave}")
     if not p_name:
@@ -754,13 +847,25 @@ def api_load_project(p_name, recover_autosave=False, *args):
         
     try:
         import os, json, re
-        safe_name = re.sub(r'[^\w\-_\. ]', '_', str(p_name))
+        safe_name = re.sub(r'[^\w\-_\\. ]', '_', str(p_name))
+        base_name = safe_name[:-4] if safe_name.lower().endswith(".png") else safe_name
         
-        filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+        is_png = False
+        infcanvas_filepath = os.path.join(canvas_state.projects_dir, f"{base_name}.infcanvas")
+        png_filepath = os.path.join(canvas_state.projects_dir, f"{base_name}.png")
+        
+        if os.path.exists(infcanvas_filepath):
+            filepath = infcanvas_filepath
+        elif os.path.exists(png_filepath):
+            filepath = png_filepath
+            is_png = True
+        else:
+            filepath = infcanvas_filepath
+
         proj_filepath = filepath
-        autosave_filepath = os.path.join(canvas_state.autosaves_dir, f"{safe_name}.infcanvas")
+        autosave_filepath = os.path.join(canvas_state.autosaves_dir, f"{base_name}.infcanvas")
         
-        if recover_autosave:
+        if recover_autosave and not is_png:
             if os.path.exists(autosave_filepath):
                 filepath = autosave_filepath
                 print(f"[DEBUG] Recovering autosave from: {filepath}")
@@ -770,10 +875,14 @@ def api_load_project(p_name, recover_autosave=False, *args):
             print("[DEBUG] Filepath does not exist!")
             return [gr.skip()] * 20
             
-        loaded_name = safe_name
+        loaded_name = base_name
         canvas_state.current_project_name = loaded_name
-        meta, mask_b64 = _load_zip_into_canvas_state(filepath)
-        print("[DEBUG] Successfully loaded zip into canvas state")
+        if is_png:
+            meta, mask_b64 = _load_png_into_canvas_state(filepath)
+            print("[DEBUG] Successfully loaded png into canvas state")
+        else:
+            meta, mask_b64 = _load_zip_into_canvas_state(filepath)
+            print("[DEBUG] Successfully loaded zip into canvas state")
         
 
         import time
@@ -836,12 +945,19 @@ def api_import_project(filepath):
         
     try:
         basename = os.path.basename(filepath)
-        safe_name = re.sub(r'[^\w\-_\. ]', '_', os.path.splitext(basename)[0])
+        name, ext = os.path.splitext(basename)
+        safe_name = re.sub(r'[^\w\-_\\. ]', '_', name)
         
-        new_filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+        if ext.lower() == ".png":
+            new_filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.png")
+            safe_name_to_load = safe_name
+        else:
+            new_filepath = os.path.join(canvas_state.projects_dir, f"{safe_name}.infcanvas")
+            safe_name_to_load = safe_name
+            
         shutil.copy2(filepath, new_filepath)
         
-        return api_load_project(safe_name)
+        return api_load_project(safe_name_to_load)
     except Exception as e:
         import traceback
         print(f"Error importing project: {e}")

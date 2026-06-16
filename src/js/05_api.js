@@ -143,6 +143,33 @@
     if (projectsBtn && projectsModal) {
         projectsBtn.addEventListener('click', async () => {
             projectsModal.style.display = 'flex';
+            
+            if (projectsBtn.animate) {
+                const btnRect = projectsBtn.getBoundingClientRect();
+                const panel = projectsModal.querySelector('.fluent-panel');
+                
+                projectsModal.animate([
+                    { opacity: 0 },
+                    { opacity: 1 }
+                ], { duration: 250, easing: 'ease' });
+                
+                const panelRect = panel.getBoundingClientRect();
+                const translateX = btnRect.left + btnRect.width/2 - (panelRect.left + panelRect.width/2);
+                const translateY = btnRect.top + btnRect.height/2 - (panelRect.top + panelRect.height/2);
+                const insetX = Math.max(0, (panelRect.width - btnRect.width) / 2);
+                const insetY = Math.max(0, (panelRect.height - btnRect.height) / 2);
+                
+                panel.animate([
+                    { transform: `translate(${translateX}px, ${translateY}px)`, clipPath: `inset(${insetY}px ${insetX}px ${insetY}px ${insetX}px round 50px)` },
+                    { transform: 'translate(0, 0)', clipPath: 'inset(0px 0px 0px 0px round 24px)' }
+                ], { duration: 350, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+                
+                panel.animate([
+                    { opacity: 0 },
+                    { opacity: 1 }
+                ], { duration: 35, easing: 'linear' });
+            }
+            
             projectsList.innerHTML = `<div style="padding: 30px 20px; text-align: center; color: #888; font-size: 14px;">${typeof t === 'function' ? t('Loading projects...') : 'Loading projects...'}</div>`;
             try {
                 const res = await fetch('/infinite-canvas-api/projects/list');
@@ -181,7 +208,8 @@
                         const visualNameInput = document.getElementById('ic-projects-name-input');
                         if (visualNameInput) visualNameInput.value = p.name;
                         
-                        projectsModal.style.display = 'none';
+                        if (window.closeProjectsModalWithAnimation) window.closeProjectsModalWithAnimation();
+                        else projectsModal.style.display = 'none';
                         
                         try {
                             const chkRes = await fetch('/infinite-canvas-api/projects/check_autosave', {
@@ -302,7 +330,8 @@
                 if (window.unlockProjectUI) window.unlockProjectUI();
             }
 
-            projectsModal.style.display = 'none';
+            if (window.closeProjectsModalWithAnimation) window.closeProjectsModalWithAnimation();
+            else projectsModal.style.display = 'none';
         });
     }
     
@@ -313,7 +342,7 @@
             
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
-            fileInput.accept = '.infcanvas';
+            fileInput.accept = '.infcanvas,.png';
             fileInput.style.display = 'none';
             document.body.appendChild(fileInput);
             
@@ -349,7 +378,8 @@
             });
             
             fileInput.click();
-            projectsModal.style.display = 'none';
+            if (window.closeProjectsModalWithAnimation) window.closeProjectsModalWithAnimation();
+            else projectsModal.style.display = 'none';
         });
     }
     

@@ -1,9 +1,10 @@
 from typing import Any, Dict
 import torch
 import cv2
-from PIL import Image
+import PIL.Image
 from modules import scripts
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 def float64(t):
     return t.to(torch.float64) if t.dtype != torch.float64 else t
@@ -58,7 +59,7 @@ class LatentBlendStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["Resolution", "InputMask"], "out": ["SdProcessing"]}
+        return {"in": [Resolution, InputMask], "out": [SdProcessing]}
     
     @classmethod
     def get_params(cls):
@@ -81,24 +82,31 @@ class LatentBlendStep(GenerationStep):
         if not ctx.var.get("enabled", False):
             return ctx
             
+        res = ctx.get(Resolution)
+        mgs = ctx.get(MaskGenSizeArr)
+        p = ctx.get(SdProcessing)
+        
+        if not res or mgs is None or not p:
+            return ctx
+            
         blend_power = ctx.var.get("power", 1.0)
-        ctx.latent_blend_power = blend_power  # sync for later scripts
         
-        edge_radius = max(1, int(max(ctx.gen_width, ctx.gen_height) * 0.025))
+        edge_radius = max(1, int(max(res.gen_width, res.gen_height) * 0.025))
         ksize = int(edge_radius) * 2 + 1
-        ctx.symmetric_soft_mask_arr = cv2.GaussianBlur(ctx.mask_gen_size_arr, (ksize, ksize), 0)
+        sym = cv2.GaussianBlur(mgs, (ksize, ksize), 0)
+        ctx.set(SymmetricSoftMaskArr, sym)
         
-        ctx.p.image_mask = Image.fromarray(ctx.symmetric_soft_mask_arr)
-        ctx.p.mask_round = False
-        ctx.p.ic_latent_blend_active = True
+        p.image_mask = PIL.Image.fromarray(sym)
+        p.mask_round = False
+        p.ic_latent_blend_active = True
         ic_script = ICLatentBlendScript()
-        ic_script.args_from = len(ctx.p.script_args)
-        ic_script.args_to = len(ctx.p.script_args)
-        if getattr(ctx.p, "scripts", None) is not None and getattr(ctx.p.scripts, "alwayson_scripts", None) is not None:
-            ctx.p.scripts.alwayson_scripts.append(ic_script)
-        elif getattr(ctx.p, "scripts", None) is None:
+        ic_script.args_from = len(p.script_args)
+        ic_script.args_to = len(p.script_args)
+        if getattr(p, "scripts", None) is not None and getattr(p.scripts, "alwayson_scripts", None) is not None:
+            p.scripts.alwayson_scripts.append(ic_script)
+        elif getattr(p, "scripts", None) is None:
             from modules.scripts import ScriptRunner
-            ctx.p.scripts = ScriptRunner()
-            ctx.p.scripts.alwayson_scripts = [ic_script]
+            p.scripts = ScriptRunner()
+            p.scripts.alwayson_scripts = [ic_script]
             
         return ctx

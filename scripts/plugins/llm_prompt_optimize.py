@@ -3,6 +3,7 @@ import hashlib
 from collections import OrderedDict
 from typing import Any, Dict
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 _llm_cache = OrderedDict()
 _LLM_CACHE_SIZE = 100
@@ -15,7 +16,7 @@ class LLMPromptOptimizeStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["Prompt"], "out": ["Prompt"]}
+        return {"in": [Prompt], "out": [Prompt]}
     
     @classmethod
     def get_params(cls):
@@ -54,15 +55,16 @@ class LLMPromptOptimizeStep(GenerationStep):
         
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         is_enabled = ctx.var.get("enabled", False)
-        if not is_enabled or not ctx.prompt:
+        prompt = ctx.get(Prompt)
+        if not is_enabled or not prompt:
             return ctx
             
         import re
         import requests
         
         # Extract and remove LoRAs
-        loras = re.findall(r'<lora:[^>]+>', ctx.prompt)
-        content_prompt = re.sub(r'<lora:[^>]+>', '', ctx.prompt).strip()
+        loras = re.findall(r'<lora:[^>]+>', prompt)
+        content_prompt = re.sub(r'<lora:[^>]+>', '', prompt).strip()
         
         # Optimize content
         api_url = ctx.var.get("api_url", "")
@@ -143,5 +145,5 @@ CRITICAL RULES:
         if loras:
             final_prompt += " " + " ".join(loras)
             
-        ctx.prompt = final_prompt
+        ctx.set(Prompt, final_prompt)
         return ctx

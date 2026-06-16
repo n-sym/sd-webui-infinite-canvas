@@ -74,7 +74,7 @@ function initICSidebar() {
              authoritative prompt textarea inside #ic_workflow_html (found via
              data-node-id/data-param-name). That way the expanded prompt stays
              the single source of truth for scraping. -->
-        <textarea id="ic-sidebar-prompt" data-node-id="parse_input" data-param-name="prompt" rows="2" placeholder="${typeof t === 'function' ? t('提示词') : '提示词'}" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 12px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; line-height: 1.4; flex-shrink: 0;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight)+'px';" onchange="sendWorkflowUpdate(this)"></textarea>
+        <textarea id="ic-sidebar-prompt" data-node-id="parse_input" data-param-name="prompt" rows="2" placeholder="${typeof t === 'function' ? t('提示词') : '提示词'}" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow-y: auto; overflow-x: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 12px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; line-height: 1.4; flex-shrink: 0;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight + 2)+'px';" onchange="sendWorkflowUpdate(this)"></textarea>
 
         <!-- Expanded: the full param/plugin cards rendered by 07_workflow.js.
              Uses max-height + opacity transition (NOT display:none↔block) so
@@ -118,17 +118,19 @@ function initICSidebar() {
         // its min-height:32px would otherwise defeat max-height:0 (min-height
         // wins per CSS spec), leaving a 32px sliver visible when expanded.
         if (expanded) {
-            // Reserve room for header (~46px) inside the cap.
-            const innerMax = Math.max(80, avail - 46);
+            // Reserve room for header (38px) + sidebar padding (28px) = 66px
+            const innerMax = Math.max(80, avail - 66);
             workflowHtml.style.maxHeight = innerMax + 'px';
             workflowHtml.style.opacity = '1';
             workflowHtml.style.overflowY = 'auto';
             collapsedPrompt.style.display = 'none';
         } else {
-            workflowHtml.style.maxHeight = '0';
+            const innerMax = Math.max(80, avail - 66);
+            workflowHtml.style.maxHeight = '0px';
             workflowHtml.style.opacity = '0';
             workflowHtml.style.overflowY = 'hidden';
             collapsedPrompt.style.display = 'block';
+            collapsedPrompt.style.maxHeight = innerMax + 'px';
         }
 
         if (iconLarge && iconSmall) {
@@ -153,7 +155,7 @@ function initICSidebar() {
             // Re-autosize textareas now that #ic_workflow_html is visible.
             workflowHtml.querySelectorAll('textarea.ic-node-param').forEach(ta => {
                 ta.style.height = 'auto';
-                ta.style.height = Math.max(32, ta.scrollHeight) + 'px';
+                ta.style.height = Math.max(32, ta.scrollHeight + 2) + 'px';
             });
         } else {
             // Mirror current prompt value into the collapsed textarea.
@@ -162,7 +164,7 @@ function initICSidebar() {
                 collapsedPrompt.value = expandedPrompt.value;
             }
             collapsedPrompt.style.height = 'auto';
-            collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight) + 'px';
+            collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';
         }
     }
 
@@ -179,11 +181,11 @@ function initICSidebar() {
             collapsedPrompt.value = expandedPrompt.value;
         }
         collapsedPrompt.style.height = 'auto';
-        collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight) + 'px';
+        collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';
         if (sidebar.getAttribute('data-ic-state') === 'expanded') {
             workflowHtml.querySelectorAll('textarea.ic-node-param').forEach(ta => {
                 ta.style.height = 'auto';
-                ta.style.height = Math.max(32, ta.scrollHeight) + 'px';
+                ta.style.height = Math.max(32, ta.scrollHeight + 2) + 'px';
             });
         }
     });
@@ -192,8 +194,18 @@ function initICSidebar() {
     // Initial autosize of the collapsed prompt.
     setTimeout(() => {
         collapsedPrompt.style.height = 'auto';
-        collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight) + 'px';
+        collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';
     }, 0);
+
+    // Keep collapsed prompt height perfectly in sync during the 0.3s width transition
+    if (window.ResizeObserver) {
+        new ResizeObserver(() => {
+            if (sidebar.getAttribute('data-ic-state') !== 'expanded' && collapsedPrompt.style.display !== 'none') {
+                collapsedPrompt.style.height = 'auto';
+                collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';
+            }
+        }).observe(sidebar);
+    }
 
     // Generate / Interrupt buttons live in the floating toolbar (01_state.js).
     // Generate now takes no args — ic_trigger_generate scrapes all params from

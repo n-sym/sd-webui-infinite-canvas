@@ -159,8 +159,40 @@ const IC_ICONS = {
     </div>`;
     container.insertAdjacentHTML('beforeend', recoverModalHTML);
     
+    window.closeProjectsModalWithAnimation = () => {
+        const modal = document.getElementById('ic-projects-modal');
+        const panel = modal ? modal.querySelector('.fluent-panel') : null;
+        const btn = document.getElementById('ic_float_projects');
+        if (modal && panel && btn && btn.animate && modal.style.display !== 'none') {
+            const btnRect = btn.getBoundingClientRect();
+            const panelRect = panel.getBoundingClientRect();
+            const translateX = btnRect.left + btnRect.width/2 - (panelRect.left + panelRect.width/2);
+            const translateY = btnRect.top + btnRect.height/2 - (panelRect.top + panelRect.height/2);
+            const insetX = Math.max(0, (panelRect.width - btnRect.width) / 2);
+            const insetY = Math.max(0, (panelRect.height - btnRect.height) / 2);
+            
+            const modalAnim = modal.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250, easing: 'ease', fill: 'forwards' });
+            const anim = panel.animate([
+                { transform: 'translate(0, 0)', clipPath: 'inset(0px 0px 0px 0px round 24px)' },
+                { transform: `translate(${translateX}px, ${translateY}px)`, clipPath: `inset(${insetY}px ${insetX}px ${insetY}px ${insetX}px round 50px)` }
+            ], { duration: 250, easing: 'cubic-bezier(0.8, 0.2, 0.8, 1)', fill: 'forwards' });
+            const opacityAnim = panel.animate([
+                { opacity: 1 },
+                { opacity: 0 }
+            ], { duration: 25, delay: 225, easing: 'linear', fill: 'forwards' });
+            anim.onfinish = () => { 
+                modal.style.display = 'none'; 
+                modalAnim.cancel();
+                anim.cancel();
+                opacityAnim.cancel();
+            };
+        } else if (modal) {
+            modal.style.display = 'none';
+        }
+    };
+
     document.getElementById('ic-projects-close').addEventListener('click', () => {
-        document.getElementById('ic-projects-modal').style.display = 'none';
+        window.closeProjectsModalWithAnimation();
     });
 
     const nodesOverlayHTML = `
@@ -324,11 +356,48 @@ const IC_ICONS = {
     });
 
     document.addEventListener('mousedown', function(e) {
+        // Prevent click effects if interacting with form controls directly
+        if (e.target.closest('input, select, textarea, button, .ic-slider-handle')) return;
+
         const target = e.target.closest('.fluent-card, #ic-nodes-toggle, #ic-nodes-panel button, .ic-pipeline-node, .res-preset-btn');
         if (!target) return;
+
+        // For large plugin cards, only trigger the physical click effect on the header
+        if (target.classList.contains('ic-sidebar-plugin-card')) {
+            if (!e.target.closest('.ic-sidebar-plugin-header')) return;
+        }
+
         const rect = target.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+
+        // Asymmetric 3D Tilt Effect
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const percentX = (x - centerX) / (centerX || 1); // -1 to 1
+        const percentY = (y - centerY) / (centerY || 1); // -1 to 1
+        
+        let tiltX = -percentY * 6; // max 6 degrees
+        let tiltY = percentX * 6;
+        
+        // Disable tilt for large setting cards to prevent dramatic clipping/distortion
+        if (target.classList.contains('ic-sidebar-plugin-card')) {
+            tiltX = 0;
+            tiltY = 0;
+        }
+        
+        target.style.transition = 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)';
+        target.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(0.99)`;
+        
+        const clearTilt = () => {
+            target.style.transform = '';
+            document.removeEventListener('mouseup', clearTilt);
+            target.removeEventListener('mouseleave', clearTilt);
+        };
+        document.addEventListener('mouseup', clearTilt);
+        target.addEventListener('mouseleave', clearTilt);
+
+        // Ripple Effect
         const ripple = document.createElement('span');
         ripple.className = 'ic-ripple';
         ripple.style.left = `${x}px`;

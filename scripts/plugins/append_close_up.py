@@ -1,5 +1,6 @@
 from typing import Any, Dict
 from scripts.pipeline_types import GenerationStep, GenerationCtx
+from scripts.typing_system import *
 
 class AppendCloseUpStep(GenerationStep):
     id = "append_close_up"
@@ -9,7 +10,7 @@ class AppendCloseUpStep(GenerationStep):
 
     @classmethod
     def type_signature(cls) -> Dict[str, list]:
-        return {"in": ["Prompt"], "out": ["Prompt"]}
+        return {"in": [Prompt], "out": [Prompt]}
     
     @classmethod
     def get_params(cls):
@@ -25,10 +26,12 @@ class AppendCloseUpStep(GenerationStep):
         
     def __call__(self, ctx: GenerationCtx) -> GenerationCtx:
         is_enabled = ctx.var.get("enabled", False)
-        if is_enabled and ctx.prompt:
-            ctx.prompt = ctx.prompt.rstrip()
-            if not ctx.prompt.endswith(","):
-                ctx.prompt += ","
-            ctx.prompt += " close-up"
-            print(f"[Append Close-Up] Appended to prompt: {ctx.prompt}")
+        prompt = ctx.get(Prompt)
+        if is_enabled and prompt:
+            prompt = prompt.rstrip()
+            if not prompt.endswith(","):
+                prompt += ","
+            prompt += " close-up"
+            ctx.set(Prompt, prompt)
+            print(f"[Append Close-Up] Appended to prompt: {prompt}")
         return ctx
