@@ -528,10 +528,10 @@
                         const toast = icGetOrCreateToast('ic-autosave-toast');
                         toast.querySelector('.ic-toast-text').innerText = t("Autosaving...");
                         toast.querySelector('.ic-toast-pct').innerText = '';
-                        const bar = toast.querySelector('.ic-toast-bar');
-                        bar.classList.add('ic-toast-bar-indeterminate');
-                        bar.style.width = '100%';
-                        bar.parentNode.style.display = 'block';
+                        const barWrap = toast.querySelector('.ic-toast-bar').parentNode;
+                        barWrap.style.display = 'block';
+                        toast.children[0].style.marginBottom = '10px';
+                        toast.querySelector('.ic-toast-bar').classList.add('ic-toast-bar-indeterminate');
                         icUpdateToastThemeForElement(toast, 'white');
                         icShowToast('ic-autosave-toast');
                     } else { // 'done'
@@ -539,9 +539,9 @@
                         if (toast) {
                             toast.querySelector('.ic-toast-text').innerText = t("Autosaved");
                             toast.querySelector('.ic-toast-pct').innerText = '';
-                            const bar = toast.querySelector('.ic-toast-bar');
-                            bar.classList.remove('ic-toast-bar-indeterminate');
-                            bar.style.width = '100%';
+                            const barWrap = toast.querySelector('.ic-toast-bar').parentNode;
+                            barWrap.style.display = 'none';
+                            toast.children[0].style.marginBottom = '0px';
                             icUpdateToastThemeForElement(toast, 'white');
                             icShowToast('ic-autosave-toast');
                             if (window.icAutosaveToastTimeout) clearTimeout(window.icAutosaveToastTimeout);
@@ -561,12 +561,6 @@
                         if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
                         if (window.icShowCustomToast) {
                             window.icShowCustomToast(t("Project saved!"), 2500, 'white', 'ic-save-success-toast');
-                            const sToast = document.getElementById('ic-save-success-toast');
-                            if (sToast) {
-                                const bar = sToast.querySelector('.ic-toast-bar');
-                                if (bar && bar.parentNode) bar.parentNode.style.display = 'none';
-                                if (sToast.children[0]) sToast.children[0].style.marginBottom = '0';
-                            }
                         }
                     }
                     break;

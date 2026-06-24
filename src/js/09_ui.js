@@ -6,17 +6,149 @@ let ic_ui_initInterval = setInterval(() => {
     }
 }, 500);
 
-// Hide scrollbars on the sidebar's inner scroll region (#ic_workflow_html)
-// while keeping it scrollable. Injected once. Both the standard property
-// (Firefox) and the ::-webkit-scrollbar pseudo (Chrome/Edge) are covered.
-if (!document.getElementById('ic-sidebar-scroll-style')) {
-    const s = document.createElement('style');
-    s.id = 'ic-sidebar-scroll-style';
-    s.textContent = `
-        #ic_workflow_html { scrollbar-width: none; -ms-overflow-style: none; }
-        #ic_workflow_html::-webkit-scrollbar { display: none; width: 0; height: 0; }
+// Universal JS Custom Scrollbar Logic
+if (!window.ic_custom_scrollbar_inited) {
+    window.ic_custom_scrollbar_inited = true;
+    
+    const style = document.createElement('style');
+    style.id = 'ic-custom-scrollbar-style';
+    style.textContent = `
+        .ic-hide-native-scroll {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+        }
+        .ic-hide-native-scroll::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
     `;
-    document.head.appendChild(s);
+    if (document.getElementById('ic-custom-scrollbar-style')) document.getElementById('ic-custom-scrollbar-style').remove();
+    document.head.appendChild(style);
+
+    window.ic_init_custom_scrollbar = function(container) {
+        if (!container || container.dataset.icHasScrollbar) return;
+        container.dataset.icHasScrollbar = 'true';
+        
+        container.classList.add('ic-hide-native-scroll');
+        const cStyle = window.getComputedStyle(container);
+        if (cStyle.position === 'static') container.style.position = 'relative';
+        
+        const thumb = document.createElement('div');
+        thumb.className = 'ic-js-scrollbar-thumb';
+        thumb.style.position = 'absolute';
+        thumb.style.right = '2px';
+        thumb.style.width = '6px';
+        thumb.style.borderRadius = '3px';
+        thumb.style.backgroundColor = 'color-mix(in srgb, var(--body-text-color, #fff) 35%, transparent)';
+        thumb.style.zIndex = '999999';
+        thumb.style.opacity = '0';
+        thumb.style.transition = 'opacity 0.2s, background-color 0.2s';
+        thumb.style.pointerEvents = 'auto';
+        thumb.style.cursor = 'default';
+        container.appendChild(thumb);
+        
+        let hideTimeout;
+        let isDragging = false;
+        let startY = 0;
+        let startScrollTop = 0;
+        
+        const updateThumb = () => {
+            if (!thumb.parentElement && document.body.contains(container)) {
+                container.appendChild(thumb);
+            }
+            
+            const sh = container.scrollHeight;
+            const ch = container.clientHeight;
+            if (sh <= ch) {
+                thumb.style.opacity = '0';
+                return;
+            }
+            
+            const thumbHeight = Math.max(30, (ch / sh) * ch);
+            thumb.style.height = `${thumbHeight}px`;
+            
+            const scrollRatio = container.scrollTop / (sh - ch);
+            const maxThumbTop = ch - thumbHeight;
+            const top = container.scrollTop + (scrollRatio * maxThumbTop);
+            
+            thumb.style.top = `${top}px`;
+            thumb.style.opacity = '1';
+            
+            clearTimeout(hideTimeout);
+            hideTimeout = setTimeout(() => {
+                if (!isDragging) thumb.style.opacity = '0';
+            }, 800);
+        };
+        
+        container.addEventListener('scroll', updateThumb, { passive: true });
+        
+        const ro = new ResizeObserver(() => {
+            if (thumb.style.opacity === '1' || thumb.style.opacity === '') updateThumb();
+        });
+        ro.observe(container);
+        
+        thumb.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startY = e.clientY;
+            startScrollTop = container.scrollTop;
+            thumb.style.opacity = '1';
+            thumb.style.backgroundColor = 'color-mix(in srgb, var(--body-text-color, #fff) 50%, transparent)';
+            clearTimeout(hideTimeout);
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const sh = container.scrollHeight;
+            const ch = container.clientHeight;
+            const thumbHeight = Math.max(30, (ch / sh) * ch);
+            const maxThumbTop = ch - thumbHeight;
+            
+            const deltaY = e.clientY - startY;
+            const scrollDelta = (deltaY / maxThumbTop) * (sh - ch);
+            container.scrollTop = startScrollTop + scrollDelta;
+        });
+        
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                thumb.style.backgroundColor = 'color-mix(in srgb, var(--body-text-color, #fff) 35%, transparent)';
+                hideTimeout = setTimeout(() => {
+                    thumb.style.opacity = '0';
+                }, 800);
+            }
+        });
+        
+        setTimeout(updateThumb, 100);
+    };
+
+    const initKnownScrollbars = () => {
+        ['ic_workflow_html', 'ic-nodes-list-col', 'ic-nodes-settings-col', 'ic-projects-list'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) window.ic_init_custom_scrollbar(el);
+        });
+    };
+    
+    // Poll for existing static elements until they load
+    const initInterval = setInterval(() => {
+        initKnownScrollbars();
+        if (document.getElementById('ic_workflow_html')) clearInterval(initInterval);
+    }, 500);
+    
+    const obs = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+            m.addedNodes.forEach(node => {
+                if (node.classList && node.classList.contains('ic-custom-options-teleported')) {
+                    window.ic_init_custom_scrollbar(node);
+                } else if (node.querySelectorAll) {
+                    node.querySelectorAll('.ic-custom-options-teleported').forEach(n => window.ic_init_custom_scrollbar(n));
+                }
+            });
+        });
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
 }
 
 function initICSidebar() {
@@ -74,7 +206,10 @@ function initICSidebar() {
              authoritative prompt textarea inside #ic_workflow_html (found via
              data-node-id/data-param-name). That way the expanded prompt stays
              the single source of truth for scraping. -->
-        <textarea id="ic-sidebar-prompt" data-node-id="parse_input" data-param-name="prompt" rows="2" placeholder="${typeof t === 'function' ? t('提示词') : '提示词'}" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow-y: auto; overflow-x: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 12px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; line-height: 1.4; flex-shrink: 0;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight + 2)+'px';" onchange="sendWorkflowUpdate(this)"></textarea>
+        <div id="ic-sidebar-prompt-wrap" style="position: relative; width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); border-radius: 12px; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; overflow: hidden; min-height: 32px; flex-shrink: 0; display: block;">
+            <div class="ic-syntax-overlay notranslate" translate="no" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 6px 8px; box-sizing: border-box; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; color: var(--body-text-color, #fff); pointer-events: none; overflow: hidden; margin: 0; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0px; text-transform: none; text-indent: 0px; text-shadow: none; font-weight: 400; font-variant-ligatures: none; font-kerning: none; -webkit-text-size-adjust: 100%; tab-size: 4;"></div>
+            <textarea id="ic-sidebar-prompt" data-node-id="parse_input" data-param-name="prompt" rows="2" placeholder="${typeof t === 'function' ? t('提示词') : '提示词'}" style="position: relative; z-index: 1; width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow-y: auto; overflow-x: hidden; background: transparent; border: none; color: transparent; caret-color: var(--body-text-color, #fff); padding: 6px 8px; outline: none; box-shadow: none !important; margin: 0; display: block; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0px; text-transform: none; text-indent: 0px; text-shadow: none; font-weight: 400; font-variant-ligatures: none; font-kerning: none; -webkit-text-size-adjust: 100%; tab-size: 4;" onfocus="this.parentElement.style.borderColor='var(--color-accent, cornflowerblue)'; if(window.ic_update_syntax) window.ic_update_syntax(this);" onblur="this.parentElement.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))'; if(window.ic_update_syntax) window.ic_update_syntax(this);" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight)+'px'; if(window.ic_update_syntax) window.ic_update_syntax(this);" onscroll="this.previousElementSibling.scrollTop = this.scrollTop;" onclick="if(window.ic_update_syntax) window.ic_update_syntax(this);" onkeyup="if(window.ic_update_syntax) window.ic_update_syntax(this);" onchange="sendWorkflowUpdate(this)"></textarea>
+        </div>
 
         <!-- Expanded: the full param/plugin cards rendered by 07_workflow.js.
              Uses max-height + opacity transition (NOT display:none↔block) so
@@ -89,6 +224,7 @@ function initICSidebar() {
     const toggleBtn = document.getElementById('ic-sidebar-toggle');
     const iconLarge = document.getElementById('ic-sidebar-icon-large');
     const iconSmall = document.getElementById('ic-sidebar-icon-small');
+    const collapsedPromptWrap = document.getElementById('ic-sidebar-prompt-wrap');
     const collapsedPrompt = document.getElementById('ic-sidebar-prompt');
     const workflowHtml = document.getElementById('ic_workflow_html');
     const titleEl = document.getElementById('ic-sidebar-title');
@@ -122,14 +258,14 @@ function initICSidebar() {
             const innerMax = Math.max(80, avail - 66);
             workflowHtml.style.maxHeight = innerMax + 'px';
             workflowHtml.style.opacity = '1';
-            workflowHtml.style.overflowY = 'auto';
-            collapsedPrompt.style.display = 'none';
+            workflowHtml.style.pointerEvents = 'auto';
+            if (collapsedPromptWrap) collapsedPromptWrap.style.display = 'none';
         } else {
             const innerMax = Math.max(80, avail - 66);
             workflowHtml.style.maxHeight = '0px';
             workflowHtml.style.opacity = '0';
-            workflowHtml.style.overflowY = 'hidden';
-            collapsedPrompt.style.display = 'block';
+            workflowHtml.style.pointerEvents = 'none';
+            if (collapsedPromptWrap) collapsedPromptWrap.style.display = 'block';
             collapsedPrompt.style.maxHeight = innerMax + 'px';
         }
 
@@ -162,6 +298,7 @@ function initICSidebar() {
             const expandedPrompt = workflowHtml.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="prompt"]');
             if (expandedPrompt && expandedPrompt.value !== collapsedPrompt.value) {
                 collapsedPrompt.value = expandedPrompt.value;
+                if (window.ic_update_syntax) window.ic_update_syntax(collapsedPrompt);
             }
             collapsedPrompt.style.height = 'auto';
             collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';
@@ -179,6 +316,7 @@ function initICSidebar() {
         const expandedPrompt = workflowHtml.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="prompt"]');
         if (expandedPrompt && expandedPrompt.value !== collapsedPrompt.value) {
             collapsedPrompt.value = expandedPrompt.value;
+            if (window.ic_update_syntax) window.ic_update_syntax(collapsedPrompt);
         }
         collapsedPrompt.style.height = 'auto';
         collapsedPrompt.style.height = Math.max(32, collapsedPrompt.scrollHeight + 2) + 'px';

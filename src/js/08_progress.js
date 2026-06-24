@@ -207,11 +207,16 @@ window.icShowCustomToast = function(msg, duration=3000, hue=200, forceId=null) {
     toast.querySelector('.ic-toast-text').innerText = msg;
     toast.querySelector('.ic-toast-pct').innerText = '';
     
-    // Reset progress bar visibility in case it was hidden by a success message
-    toast.querySelector('.ic-toast-bar').parentNode.style.display = 'block';
-    toast.children[0].style.marginBottom = '10px';
+    const barWrap = toast.querySelector('.ic-toast-bar').parentNode;
+    if (duration > 0) {
+        barWrap.style.display = 'none';
+        toast.children[0].style.marginBottom = '0px';
+    } else {
+        barWrap.style.display = 'block';
+        toast.children[0].style.marginBottom = '10px';
+        toast.querySelector('.ic-toast-bar').classList.add('ic-toast-bar-indeterminate');
+    }
     
-    toast.querySelector('.ic-toast-bar').classList.add('ic-toast-bar-indeterminate');
     icUpdateToastThemeForElement(toast, hue);
     icShowToast(toastId);
     
@@ -237,8 +242,8 @@ window.icRenderToastState = function() {
         const toast = icGetOrCreateToast('ic-autosave-toast');
         toast.querySelector('.ic-toast-text').innerText = t("Autosaved successfully!");
         toast.querySelector('.ic-toast-pct').innerText = '';
-        toast.querySelector('.ic-toast-bar').classList.remove('ic-toast-bar-indeterminate');
-        toast.querySelector('.ic-toast-bar').style.width = '100%';
+        toast.querySelector('.ic-toast-bar').parentNode.style.display = 'none';
+        toast.children[0].style.marginBottom = '0px';
         icUpdateToastThemeForElement(toast, 'white');
         icShowToast('ic-autosave-toast');
         if (window.icAutosaveToastTimeout) clearTimeout(window.icAutosaveToastTimeout);

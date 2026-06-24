@@ -66,7 +66,8 @@ class CanvasState:
         self.tiles_now = None
         self.pending_data = None
         self.canvas_bounds = {"x": 0, "y": 0, "w": 1024, "h": 1024}
-        self.max_size = 8192
+        self.canvas_bounds_prev = None
+        self.max_size = 16384
         self.is_dirty = False
         self.current_state = 'now'
         self.workflow = []
@@ -455,6 +456,7 @@ class CanvasState:
             
         # Capture pre-generation state in case of discard
         self.tiles_prev = self._clone_tiles(self.tiles)
+        self.canvas_bounds_prev = self.canvas_bounds.copy()
             
         # 1. Scale Canvas if Zoom-in (Target drawn small)
         target_max = max(target_rect['w'], target_rect['h'])
@@ -465,6 +467,7 @@ class CanvasState:
         actual_canvas_scale = 1.0
         if requested_scale > 1.0 and auto_scale:
             current_max_dim = max(self.canvas_bounds['w'], self.canvas_bounds['h'])
+            print(f"!!!{self.canvas_bounds['w'], self.canvas_bounds['h']}")
             max_allowed_scale = self.max_size / current_max_dim if current_max_dim > 0 else 1.0
             actual_canvas_scale = min(requested_scale, max_allowed_scale)
             
@@ -733,5 +736,7 @@ class CanvasState:
         self.pending_data = None
         if self.tiles_prev:
             self.tiles = self._clone_tiles(self.tiles_prev)
+        if getattr(self, 'canvas_bounds_prev', None):
+            self.canvas_bounds = self.canvas_bounds_prev.copy()
 
 canvas_state = CanvasState()

@@ -22,6 +22,7 @@ from scripts.plugins.sd_controlnet import SdControlNetStep
 from scripts.plugins.firstpass_review import FirstPassReviewStep
 from scripts.plugins.second_pass import SecondPassStep
 from scripts.plugins.edge_fix import EdgeFixStep
+from scripts.plugins.cross_attn_injector import CrossAttnInjectorStep
 
 import scripts.plugins.prompt_review as prompt_review
 
@@ -85,6 +86,7 @@ def execute_pipeline_core(ctx: GenerationCtx):
         AppendCloseUpStep(),
         PromptReviewStep(),
         SetupProcessingStep(),
+        CrossAttnInjectorStep(),
         LatentBlendStep(),
         SdControlNetStep(),
         FirstPassStep(),
@@ -254,6 +256,7 @@ def api_validate_workflow(payload_json):
             AppendCloseUpStep(),
             PromptReviewStep(),
             SetupProcessingStep(),
+            CrossAttnInjectorStep(),
             LatentBlendStep(),
             SdControlNetStep(),
             FirstPassStep(),
@@ -284,6 +287,7 @@ def api_get_workflow():
         AppendCloseUpStep,
         PromptReviewStep,
         SetupProcessingStep,
+        CrossAttnInjectorStep,
         LatentBlendStep,
         SdControlNetStep,
         FirstPassStep,

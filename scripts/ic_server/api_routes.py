@@ -450,6 +450,17 @@ def dev_reload_python():
         traceback.print_exc()
         return {"error": f"Failed to reload Python modules: {str(e)}"}
 
+@router.get("/download")
+def download_canvas(name: str = "canvas"):
+    from fastapi import Response
+    import scripts.core_logic as core_logic
+    img_bytes = core_logic.api_download_canvas()
+    if img_bytes is None:
+        return {"error": "Canvas is empty"}
+    
+    headers = {"Content-Disposition": f'attachment; filename="{name}.png"'}
+    return Response(content=img_bytes, media_type="image/png", headers=headers)
+
 def on_app_started(demo, app: FastAPI):
     app.include_router(router)
 

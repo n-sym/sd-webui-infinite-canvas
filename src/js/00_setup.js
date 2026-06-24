@@ -109,7 +109,7 @@ function t(enStr) {
         'White': '全白',
         'Extend Edge': '扩展边缘',
         'Edge Blur': '边缘模糊',
-        'Hires Fix': '高分修复',
+        'Hires Fix': '高清修复',
         'Upscaler': '放大算法',
         'Scale Factor': '放大倍数',
         'Tile Overlap': '切片重叠像素',

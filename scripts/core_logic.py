@@ -49,6 +49,7 @@ from scripts.plugins.prompt_review import PromptReviewStep
 from scripts.plugins.latent_blend import LatentBlendStep
 from scripts.plugins.second_pass import SecondPassStep
 from scripts.plugins.edge_fix import EdgeFixStep
+from scripts.plugins.cross_attn_injector import CrossAttnInjectorStep
 import scripts.plugins.prompt_review as prompt_review
 import uuid
 
@@ -968,6 +969,23 @@ def api_import_project(filepath):
 def api_set_autosave(enabled):
     canvas_state.autosave_enabled = bool(enabled)
     return {"status": "success"}
+
+def api_download_canvas():
+    from io import BytesIO
+    canvas_state._ensure_bounds_cover_tiles()
+    bounds = canvas_state.canvas_bounds
+    if bounds['w'] <= 0 or bounds['h'] <= 0:
+        return None
+    img = canvas_state._extract_from_tiles_for_rect(bounds)
+    
+    # Auto-crop transparent padding
+    bbox = img.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+        
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 def api_check_autosave():
     status = getattr(canvas_state, "autosave_status", "idle")

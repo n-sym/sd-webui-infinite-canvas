@@ -47,8 +47,8 @@ class FirstPassReviewStep(GenerationStep):
             <img src="{img_b64}" style="display: block; margin: 0 auto; max-width: 100%; max-height: 512px; border-radius: 12px; border: 1px solid var(--border-color-primary, rgba(255,255,255,0.2)); object-fit: contain; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
         </div>
         <div style="display:flex; justify-content:flex-end; gap:12px; margin-top: 24px;">
-            <button id="ic_dyn_cancel_fp" style="padding:0 20px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:40px; background:var(--button-secondary-background-fill, rgba(255,255,255,0.1)); color:var(--button-secondary-text-color, var(--body-text-color, #fff)); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;">Cancel Generation</button>
-            <button id="ic_dyn_continue_fp" style="padding:0 24px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:40px; background:var(--color-accent, #f97316); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s; box-shadow:0 2px 8px rgba(249, 115, 22, 0.3);">Continue</button>
+            <button id="ic_dyn_cancel_fp" class="res-preset-btn" style="height:40px; padding:0 20px; font-size:15px;">Cancel Generation</button>
+            <button id="ic_dyn_continue_fp" class="res-preset-btn primary" style="height:40px; padding:0 24px; font-size:15px;">Continue</button>
         </div>
         """
         

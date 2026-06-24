@@ -41,8 +41,8 @@ class PromptReviewStep(GenerationStep):
             <textarea id="ic_dyn_negative" rows="3" style="width:100%; box-sizing:border-box; padding:12px; border-radius:8px; background:var(--input-background-fill, rgba(0,0,0,0.1)); color:var(--body-text-color, #fff); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); outline:none; font-family:inherit; resize:vertical; transition:border 0.2s;">{negative_prompt}</textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:12px;">
-            <button id="ic_dyn_cancel" style="padding:0 20px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:40px; background:var(--button-secondary-background-fill, rgba(255,255,255,0.1)); color:var(--button-secondary-text-color, var(--body-text-color, #fff)); border:1px solid var(--border-color-primary, rgba(255,255,255,0.2)); border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s;">Cancel Generation</button>
-            <button id="ic_dyn_continue" style="padding:0 24px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; height:40px; background:var(--color-accent, #f97316); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; transition:all 0.2s; box-shadow:0 2px 8px rgba(249, 115, 22, 0.3);">Continue</button>
+            <button id="ic_dyn_cancel" class="res-preset-btn" style="height:40px; padding:0 20px; font-size:15px;">Cancel Generation</button>
+            <button id="ic_dyn_continue" class="res-preset-btn primary" style="height:40px; padding:0 24px; font-size:15px;">Continue</button>
         </div>
         """
         

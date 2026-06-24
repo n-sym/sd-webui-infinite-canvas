@@ -38,9 +38,10 @@ class TypeMeta(type):
         return TypeMapping(cls, other)
 
     def to_json(cls):
-        if hasattr(cls, "__args__"):
+        # If __args__ is directly in __dict__, this is a dynamically created generic (like Array[Float])
+        if "__args__" in cls.__dict__:
             params_out = []
-            for p in getattr(cls, "__args__", []):
+            for p in cls.__dict__["__args__"]:
                 if p is ...:
                     params_out.append("AnySize")
                 elif hasattr(p, "__name__"):
@@ -53,6 +54,7 @@ class TypeMeta(type):
                 "type": cls.__bases__[0].__name__,
                 "params": params_out
             }
+        # Explicit named subclasses (like InputImage or Image3) just use their name
         return {"type": cls.__name__}
 
 class IC_Type(metaclass=TypeMeta):

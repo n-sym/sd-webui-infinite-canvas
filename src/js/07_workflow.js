@@ -56,6 +56,15 @@ workflowStyle.textContent = `
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
     }
 
+    @keyframes icSelectPopupMorph {
+        0% { transform: scale(0.98) translateY(-4px); opacity: 0; }
+        100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .ic-custom-options-teleported {
+        animation: icSelectPopupMorph 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        transform-origin: top center;
+    }
+
     .dark .ic-select {
         background-color: rgba(255,255,255,0.05) !important;
     }
@@ -145,14 +154,32 @@ function renderParamRow(pluginId, param, val) {
         const escaped = String(val == null ? '' : val)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
-        return `<div style="margin-bottom: 10px; font-size: 13px; color: var(--body-text-color, #ccc);">
-            <div style="margin-bottom: 4px; font-weight: 600;">${t(param.label)}</div>
-            <textarea class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" rows="2" style="width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow: hidden; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 12px; font-size: 11px; font-family: sans-serif; outline: none; box-shadow: none !important; transition: border-color 0.2s; line-height: 1.4;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight + 2)+'px';" onchange="sendWorkflowUpdate(this)">${escaped}</textarea>
+        
+        const uniqueClass = `ic-prompt-wrap-${pluginId}-${param.name}`;
+        
+        // Use explicitly named fonts because some Chromium versions resolve "system-ui" differently for textareas vs divs (e.g. Segoe UI vs Arial), causing horizontal per-character width drift.
+        const sharedTypography = "font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0px; text-transform: none; text-indent: 0px; text-shadow: none; font-weight: 400; font-variant-ligatures: none; font-kerning: none; -webkit-text-size-adjust: 100%; tab-size: 4;";
+        
+        return `
+        <div style="margin-bottom: 8px;" ${param.tooltip ? `title="${typeof t === 'function' ? t(param.tooltip) : param.tooltip}"` : ''}>
+            <div style="margin-bottom: 4px; font-size: 13px; color: var(--body-text-color, #ccc);">${typeof t === 'function' ? t(param.label) : param.label}</div>
+            <div class="${uniqueClass}" style="position: relative; width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); border-radius: 12px; transition: border-color 0.2s; overflow: hidden; min-height: 32px;">
+                <div class="ic-syntax-overlay notranslate" translate="no" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 6px 8px; box-sizing: border-box; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; color: var(--body-text-color, #fff); pointer-events: none; overflow: hidden; margin: 0; ${sharedTypography}"></div>
+                <textarea class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" rows="2" style="position: relative; z-index: 1; width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow: hidden; background: transparent; border: none; color: transparent; caret-color: var(--body-text-color, #fff); padding: 6px 8px; outline: none; box-shadow: none !important; margin: 0; display: block; ${sharedTypography}"
+                onfocus="this.parentElement.style.borderColor='var(--color-accent, cornflowerblue)'; if(window.ic_update_syntax) window.ic_update_syntax(this);" 
+                onblur="this.parentElement.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))'; if(window.ic_update_syntax) window.ic_update_syntax(this);" 
+                oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight)+'px'; if(window.ic_update_syntax) window.ic_update_syntax(this);" 
+                onscroll="this.previousElementSibling.scrollTop = this.scrollTop;"
+                onclick="if(window.ic_update_syntax) window.ic_update_syntax(this);"
+                onkeyup="if(window.ic_update_syntax) window.ic_update_syntax(this);"
+                onchange="sendWorkflowUpdate(this)">${escaped}</textarea>
+            </div>
         </div>`;
     }
 
-    let htmlChunk = `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--body-text-color, #ccc);">`;
-    htmlChunk += `<span style="flex-shrink: 0; margin-right: 15px;">${t(param.label)}</span>`;
+    const tooltipAttr = param.tooltip ? ` title="${typeof t === 'function' ? t(param.tooltip) : param.tooltip}"` : '';
+    let htmlChunk = `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; color: var(--body-text-color, #ccc);"${tooltipAttr}>`;
+    htmlChunk += `<span style="flex-shrink: 0; margin-right: 15px;">${typeof t === 'function' ? t(param.label) : param.label}</span>`;
 
     if (param.type === 'bool') {
         htmlChunk += `<input type="checkbox" class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" ${val ? 'checked' : ''} style="cursor: pointer;" onchange="sendWorkflowUpdate(this)" />`;
@@ -165,13 +192,81 @@ function renderParamRow(pluginId, param, val) {
         const inputType = param.type === 'password' ? 'password' : 'text';
         htmlChunk += `<input type="${inputType}" class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" value="${val}" style="flex: 0 0 260px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 6px 8px; border-radius: 16px; font-size: 11px; outline: none; box-shadow: none !important; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" onchange="sendWorkflowUpdate(this)" />`;
     } else if (param.type === 'enum') {
-        htmlChunk += `<select class="ic-node-param ic-select" data-node-id="${pluginId}" data-param-name="${param.name}" style="flex: 1; max-width: 140px; margin-left: 10px; font-size: 11px; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 4px; border-radius: 16px; outline: none; box-shadow: none !important; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-accent, cornflowerblue)';" onblur="this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" onchange="sendWorkflowUpdate(this)">`;
+        const uniqueId = `ic-custom-select-${pluginId}-${param.name}`.replace(/[^a-zA-Z0-9-]/g, '-');
+        
+        // 1. The hidden actual select
+        htmlChunk += `<select id="${uniqueId}-native" class="ic-node-param" data-node-id="${pluginId}" data-param-name="${param.name}" style="display: none;">`;
+        let selectedChoice = param.choices[0];
         param.choices.forEach((c, idx) => {
-            const displayChoice = typeof t === 'function' ? t(c) : c;
             const isSelected = (c === val) || (idx === val) || (String(idx) === String(val));
-            htmlChunk += `<option value="${c}" ${isSelected ? 'selected' : ''}>${displayChoice}</option>`;
+            if (isSelected) selectedChoice = c;
+            htmlChunk += `<option value="${c}" ${isSelected ? 'selected' : ''}>${c}</option>`;
         });
         htmlChunk += `</select>`;
+
+        const selectedChoiceStr = typeof t === 'function' ? t(selectedChoice) : selectedChoice;
+
+        // 2. The custom UI
+        htmlChunk += `
+        <div id="${uniqueId}-wrapper" class="ic-custom-select-wrapper" style="position: relative; flex: 1; max-width: 140px; margin-left: 10px; outline: none;" tabindex="0" onblur="
+            setTimeout(() => {
+                const opts = document.getElementById('${uniqueId}-opts');
+                if(opts) opts.remove();
+                const disp = this.querySelector('.ic-custom-select-display');
+                if(disp) disp.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';
+            }, 150);
+        ">
+            <div class="ic-custom-select-display" onclick="
+                this.parentElement.focus();
+                let existing = document.getElementById('${uniqueId}-opts');
+                if(existing) {
+                    existing.remove();
+                    this.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';
+                    return;
+                }
+                document.querySelectorAll('.ic-custom-options-teleported').forEach(el => el.remove());
+                const tpl = this.nextElementSibling;
+                const opts = tpl.content.cloneNode(true).firstElementChild;
+                opts.id = '${uniqueId}-opts';
+                const rect = this.getBoundingClientRect();
+                opts.style.position = 'fixed';
+                opts.style.top = (rect.top - 4) + 'px';
+                opts.style.left = (rect.left - 4) + 'px';
+                opts.style.width = (rect.width + 8) + 'px';
+                opts.style.zIndex = '999999';
+                opts.style.fontFamily = window.getComputedStyle(this).fontFamily;
+                document.body.appendChild(opts);
+                this.style.borderColor='var(--color-accent, cornflowerblue)';
+            " style="box-sizing: border-box; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); color: var(--body-text-color, #fff); padding: 5px 10px; border-radius: 12px; font-size: 11px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: border-color 0.2s; user-select: none;">
+                <span class="ic-custom-selected-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 4px;">${selectedChoiceStr}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6; flex-shrink: 0;"><path d="M6 9l6 6 6-6"></path></svg>
+            </div>
+            <template class="ic-custom-options-tpl">
+                <div class="ic-custom-options-teleported" style="box-sizing: border-box; background: var(--background-fill-primary, #1e293b); border: 1px solid transparent; border-radius: 12px; overflow-y: auto; max-height: 220px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 4px; display: flex; flex-direction: column; gap: 2px;">`;
+        
+        param.choices.forEach((c, idx) => {
+            const isSelected = (c === val) || (idx === val) || (String(idx) === String(val));
+            const disp = typeof t === 'function' ? t(c) : c;
+            const pillHtml = isSelected ? `<div style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 14px; background-color: var(--color-accent, cornflowerblue); border-radius: 4px;"></div>` : ``;
+            const bg = isSelected ? `rgba(255,255,255,0.08)` : `transparent`;
+            
+            htmlChunk += `<div class="ic-custom-option" data-val="${c.replace(/"/g, '&quot;')}" onclick="
+                const nativeSelect = document.getElementById('${uniqueId}-native');
+                const wrap = document.getElementById('${uniqueId}-wrapper');
+                if(wrap) wrap.querySelector('.ic-custom-selected-text').innerText = this.querySelector('span').innerText;
+                if(nativeSelect) {
+                    nativeSelect.value = this.dataset.val;
+                    sendWorkflowUpdate(nativeSelect);
+                }
+                this.parentElement.remove();
+                if(wrap) wrap.querySelector('.ic-custom-select-display').style.borderColor = 'var(--border-color-primary, rgba(128,128,128,0.2))';
+            " style="position: relative; box-sizing: border-box; padding: 5px 10px; font-size: 11px; color: var(--body-text-color, #f1f5f9); cursor: pointer; transition: background 0.15s; display: flex; justify-content: flex-start; align-items: center; user-select: none; border-radius: 8px; background: ${bg};" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='${bg}'">
+                ${pillHtml}
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${disp}</span>
+            </div>`;
+        });
+        
+        htmlChunk += `</div></template></div>`;
     } else if (param.type === 'randomseed') {
         // Number input (carries .ic-node-param so scraping works) + a "reuse"
         // button (replays the last actually-used seed captured from the
@@ -205,6 +300,7 @@ async function updateWorkflowUI(data, container) {
     if (!data || !data.registry) return;
 
     const stepParams = data.step_params || {};
+    window.ic_current_step_params = JSON.parse(JSON.stringify(stepParams));
     const registry = data.registry || [];
 
     // Make API call for validation
@@ -254,7 +350,7 @@ async function updateWorkflowUI(data, container) {
             }
             let hasError = hasErrorYet;
             let errorText = hasError ? error_reason : "";
-            html += createNodeHtml(t(node.name), hue, hasError, errorText);
+            html += createNodeHtml(t(node.name), hue, hasError, errorText, node.type_signature);
         }
     });
     html += `</div>`;
@@ -275,10 +371,10 @@ async function updateWorkflowUI(data, container) {
             isPluginEnabled = pValues['enabled'] !== undefined ? pValues['enabled'] : enabledParam.default;
         }
 
-        settingsHtml += `<div class="ic-sidebar-plugin-header" style="margin-bottom: 8px;">`;
+        settingsHtml += `<div class="ic-sidebar-plugin-header">`;
         settingsHtml += `<span>${t(plugin.name)}</span>`;
         if (enabledParam) {
-            settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="enabled" ${isPluginEnabled ? 'checked' : ''} style="cursor: pointer;" onchange="const wraps = document.querySelectorAll('.ic_plugin_params_${plugin.id}'); wraps.forEach(w => { w.style.gridTemplateRows = this.checked ? '1fr' : '0fr'; w.style.opacity = this.checked ? '1' : '0'; }); sendWorkflowUpdate(this)" />`;
+            settingsHtml += `<input type="checkbox" class="ic-node-param" data-node-id="${plugin.id}" data-param-name="enabled" ${isPluginEnabled ? 'checked' : ''} style="cursor: pointer;" onchange="const wraps = document.querySelectorAll('.ic_plugin_params_${plugin.id}'); wraps.forEach(w => { w.style.gridTemplateRows = this.checked ? '1fr' : '0fr'; w.style.opacity = this.checked ? '1' : '0'; }); setTimeout(() => sendWorkflowUpdate(this), 300);" />`;
         }
         settingsHtml += `</div>`;
 
@@ -296,8 +392,12 @@ async function updateWorkflowUI(data, container) {
         if (settingsBody) {
             settingsHtml += `<div class="ic_plugin_params_${plugin.id}" style="display: grid; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; grid-template-rows: ${isPluginEnabled ? '1fr' : '0fr'}; opacity: ${isPluginEnabled ? '1' : '0'};">`;
             settingsHtml += `<div style="min-height: 0; overflow: hidden;">`;
+            settingsHtml += `<div style="padding-top: 8px;">`;
             settingsHtml += settingsBody;
-            settingsHtml += `</div></div>`;
+            settingsHtml += `</div></div></div>`;
+        } else {
+            // Pure toggle plugins need an empty div to balance the negative margin on the header
+            settingsHtml += `<div></div>`;
         }
         settingsHtml += `</div>`;
     });
@@ -327,18 +427,25 @@ async function updateWorkflowUI(data, container) {
         });
         if (!genBody) return; // pure-toggle plugin → skip sidebar
 
+        window.ic_sidebar_collapse_state = window.ic_sidebar_collapse_state || {};
+        const isCardOpen = window.ic_sidebar_collapse_state[plugin.id] !== false; // default true
+        const gridRows = isCardOpen ? '1fr' : '0fr';
+        const gridOpacity = isCardOpen ? '1' : '0';
+        const chevronRot = isCardOpen ? '0deg' : '-90deg';
+
         const hue = plugin.sort_index % 360;
-        sidebarHtml += `<div class="ic-sidebar-plugin-card fluent-card" style="--node-hue: ${hue}; cursor: pointer;" onclick="if(event.target.closest('.ic-sidebar-plugin-wrap')) return; (function(c){const w=c.querySelector('.ic-sidebar-plugin-wrap');const ch=c.querySelector('.ic-sidebar-plugin-chevron');const open=w.style.gridTemplateRows!=='0fr';w.style.gridTemplateRows=open?'0fr':'1fr';w.style.opacity=open?'0':'1';ch.style.transform=open?'rotate(-90deg)':'rotate(0deg)';})(this)">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-card fluent-card" style="--node-hue: ${hue}; cursor: pointer;" onclick="if(event.target.closest('.ic-sidebar-plugin-wrap')) return; (function(c){const w=c.querySelector('.ic-sidebar-plugin-wrap');const ch=c.querySelector('.ic-sidebar-plugin-chevron');const open=w.style.gridTemplateRows!=='0fr';w.style.gridTemplateRows=open?'0fr':'1fr';w.style.opacity=open?'0':'1';ch.style.transform=open?'rotate(-90deg)':'rotate(0deg)'; window.ic_sidebar_collapse_state['${plugin.id}'] = !open;})(this)">`;
         // Header: click toggles collapse (NOT enabled). Chevron rotates.
         sidebarHtml += `<div class="ic-sidebar-plugin-header">`;
         sidebarHtml += `<span>${t(plugin.name)}</span>`;
-        sidebarHtml += `<svg class="ic-sidebar-plugin-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(0deg);"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        sidebarHtml += `<svg class="ic-sidebar-plugin-chevron" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${chevronRot});"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
         sidebarHtml += `</div>`;
-        // Body (expanded by default)
-        sidebarHtml += `<div class="ic-sidebar-plugin-wrap" style="display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; opacity: 1;">`;
-        sidebarHtml += `<div class="ic-sidebar-plugin-body" style="min-height: 0; overflow: hidden; padding-top: 8px;">`;
+        // Body
+        sidebarHtml += `<div class="ic-sidebar-plugin-wrap" style="display: grid; grid-template-rows: ${gridRows}; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; opacity: ${gridOpacity};">`;
+        sidebarHtml += `<div style="min-height: 0; overflow: hidden;">`;
+        sidebarHtml += `<div class="ic-sidebar-plugin-body" style="padding-top: 8px;">`;
         sidebarHtml += genBody;
-        sidebarHtml += `</div></div>`;
+        sidebarHtml += `</div></div></div>`;
         sidebarHtml += `</div>`;
     });
 
@@ -358,6 +465,7 @@ async function updateWorkflowUI(data, container) {
         root.querySelectorAll('textarea.ic-node-param').forEach(ta => {
             ta.style.height = 'auto';
             ta.style.height = Math.max(32, ta.scrollHeight + 2) + 'px';
+            if (window.ic_update_syntax) window.ic_update_syntax(ta);
         });
     };
     _autosize(container);
@@ -387,12 +495,11 @@ window.sendWorkflowUpdate = function(changedElem) {
         });
     }
 
-    const stepParams = {};
+    const stepParams = window.ic_current_step_params ? JSON.parse(JSON.stringify(window.ic_current_step_params)) : {};
     // Scrape BOTH views: the sidebar (generation params) AND the overlay
     // settings column (settings + enabled). The two views render disjoint
-    // param sets, so merging them here yields the complete stepParams.
-    // (Previously this only scraped the sidebar, which silently dropped any
-    // settings param like API keys — now fixed.)
+    // param sets, so merging them here yields the complete updated stepParams.
+    // Unrendered elements (like generation params of disabled plugins) are preserved because we initialized from ic_current_step_params.
     const sidebar = document.getElementById('ic_workflow_html');
     const settingsCol = document.getElementById('ic-nodes-settings-col');
     const inputs = [
@@ -426,13 +533,24 @@ window.sendWorkflowUpdate = function(changedElem) {
       .catch(e => console.error("Workflow update failed", e));
 }
 
-function createNodeHtml(text, hue, hasError = false, errorText = "") {
+function formatType(tObj) {
+    if (!tObj) return "Unknown";
+    if (typeof tObj === 'string') return tObj;
+    if (tObj.mapping) return `${formatType(tObj.source)} ➔ ${formatType(tObj.target)}`;
+    let base = tObj.type || "Unknown";
+    if (tObj.params && tObj.params.length > 0) {
+        return `${base}[${tObj.params.map(p => typeof p === 'object' ? formatType(p) : p).join(', ')}]`;
+    }
+    return base;
+}
+
+function createNodeHtml(text, hue, hasError = false, errorText = "", typeSig = null) {
     let errorHtml = "";
     if (hasError) {
         // Escape single quotes for the onclick alert
         const safeError = errorText.replace(/'/g, "\\'");
         errorHtml = `
-            <div title="${errorText}" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); width:16px; height:16px; background-color:#ef4444; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="alert('${safeError}')">
+            <div title="${errorText}" style="position:absolute; right:8px; top:12px; width:16px; height:16px; background-color:#ef4444; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="alert('${safeError}'); event.stopPropagation();">
                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -440,8 +558,155 @@ function createNodeHtml(text, hue, hasError = false, errorText = "") {
             </div>
         `;
     }
-    return `<div class="ic-pipeline-node fluent-card" style="--node-hue: ${hue}; position:relative; padding-right: ${hasError ? '28px' : '12px'};">
+
+    let typeHtml = "";
+    if (typeSig) {
+        const renderBadge = (t) => `<span style="display:inline-block; padding: 2px 4px; background: rgba(0,0,0,0.2); border-radius: 4px; margin: 2px; color: #223751;">${formatType(t)}</span>`;
+        let ins = (typeSig.in || []).map(renderBadge).join('');
+        let outs = (typeSig.out || []).map(renderBadge).join('');
+        
+        typeHtml = `
+            <div class="ic-node-types-container" style="display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;">
+                <div style="min-height: 0; overflow: hidden;">
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">
+                        ${ins ? `<div style="margin-bottom: 4px; color: #292e35;"><strong style="font-weight: 600;">IN:</strong> ${ins}</div>` : ''}
+                        ${outs ? `<div style="color: #292e35;"><strong style="font-weight: 600;">OUT:</strong> ${outs}</div>` : ''}
+                        ${(!ins && !outs) ? `<div style="color: #64748b; font-style: italic;">No type signature</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `<div class="ic-pipeline-node fluent-card" style="--node-hue: ${hue}; position:relative; padding-right: ${hasError ? '28px' : '12px'}; cursor: pointer;" onclick="(function(c){const t = c.querySelector('.ic-node-types-container'); if(t){const open=t.style.gridTemplateRows!=='0fr';t.style.gridTemplateRows=open?'0fr':'1fr';t.style.opacity=open?'0':'1';}})(this)">
         <div class="fluent-content">${text}</div>
+        ${typeHtml}
         ${errorHtml}
     </div>`;
 }
+
+if (!window.ic_custom_select_scroll_listener_added) {
+    window.ic_custom_select_scroll_listener_added = true;
+    const closeDropdowns = (e) => {
+        if (e.target.closest('.ic-custom-options-teleported')) return;
+        document.querySelectorAll('.ic-custom-options-teleported').forEach(el => el.remove());
+        document.querySelectorAll('.ic-custom-select-display').forEach(disp => {
+            disp.style.borderColor = 'var(--border-color-primary, rgba(128,128,128,0.2))';
+        });
+    };
+    window.addEventListener('wheel', closeDropdowns, { passive: true, capture: true });
+    window.addEventListener('scroll', closeDropdowns, { passive: true, capture: true });
+}
+
+// Prompt Syntax Highlighting & Bracket Matching Engine
+window.ic_update_syntax = function(textarea) {
+    const overlay = textarea.previousElementSibling;
+    if (!overlay || !overlay.classList.contains('ic-syntax-overlay')) return;
+    
+    const text = textarea.value;
+    const cursorPos = textarea.selectionStart;
+    
+    // Low saturation Tag Cloud colors
+    const TAG_COLORS = [
+        'color-mix(in srgb, #ef4444 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #f97316 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #eab308 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #22c55e 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #0ea5e9 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #8b5cf6 35%, var(--body-text-color, #fff))',
+        'color-mix(in srgb, #ec4899 35%, var(--body-text-color, #fff))'
+    ];
+    
+    // 1. Bracket Matching Map
+    const pairMap = new Map();
+    const openStack = [];
+    for(let i=0; i<text.length; i++) {
+        const c = text[i];
+        if (c === '(' || c === '[' || c === '{') {
+            openStack.push({char: c, index: i});
+        } else if (c === ')' || c === ']' || c === '}') {
+            const expectedOpen = (c === ')') ? '(' : (c === ']') ? '[' : '{';
+            let matchIdx = -1;
+            for(let j=openStack.length-1; j>=0; j--) {
+                if(openStack[j].char === expectedOpen) {
+                    matchIdx = j;
+                    break;
+                }
+            }
+            if (matchIdx !== -1) {
+                const openNode = openStack.splice(matchIdx, 1)[0];
+                pairMap.set(openNode.index, i);
+                pairMap.set(i, openNode.index);
+            }
+        }
+    }
+    
+    let activeB1 = -1, activeB2 = -1;
+    // Check cursor adjacency. If typing immediately after a bracket, or clicking right before it.
+    if (cursorPos > 0 && pairMap.has(cursorPos - 1)) {
+        activeB1 = cursorPos - 1; activeB2 = pairMap.get(activeB1);
+    } else if (cursorPos < text.length && pairMap.has(cursorPos)) {
+        activeB1 = cursorPos; activeB2 = pairMap.get(activeB1);
+    }
+
+    // 2. LoRA / Embeddings regex pre-parse
+    const loras = [];
+    const loraRegex = /<(lora|lyco):[^>]+>/g;
+    let match;
+    while ((match = loraRegex.exec(text)) !== null) {
+        loras.push({start: match.index, end: loraRegex.lastIndex});
+    }
+    
+    let html = '';
+    let tagIdx = 0;
+    
+    let currentStyle = '';
+    let buffer = '';
+    
+    const flush = () => {
+        if (!buffer) return;
+        const escaped = buffer.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        if (currentStyle) {
+            html += `<span style="${currentStyle}">${escaped}</span>`;
+        } else {
+            html += escaped;
+        }
+        buffer = '';
+    };
+
+    // 3. Chunk-based span generation
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const isLora = loras.some(l => i >= l.start && i < l.end);
+        
+        let newStyle = `color: ${TAG_COLORS[tagIdx % TAG_COLORS.length]};`;
+        
+        if (isLora) {
+            newStyle = `color: var(--color-accent, cornflowerblue);`;
+        } else if (c === '(' || c === ')' || c === '[' || c === ']' || c === '{' || c === '}') {
+            if (i === activeB1 || i === activeB2) {
+                newStyle = `color: var(--body-text-color, #fff); background-color: color-mix(in srgb, var(--color-accent, cornflowerblue) 50%, transparent); border-radius: 2px;`;
+            } else {
+                newStyle = `color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent);`;
+            }
+        } else if (c === ',') {
+            newStyle = `color: color-mix(in srgb, var(--body-text-color, #fff) 40%, transparent);`;
+        } else if (c === ':') {
+            newStyle = `color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent);`;
+        }
+        
+        if (newStyle !== currentStyle) {
+            flush();
+            currentStyle = newStyle;
+        }
+        buffer += c;
+        
+        if (c === ',') tagIdx++;
+    }
+    flush();
+    
+    // WebKit textareas add an invisible trailing newline space if ending in newline
+    if (text.endsWith('\\n')) html += '<br/>';
+    
+    overlay.innerHTML = html;
+};

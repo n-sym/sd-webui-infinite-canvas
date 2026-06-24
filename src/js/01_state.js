@@ -91,9 +91,9 @@ const IC_ICONS = {
                 <input type="range" id="ic-modal-feather" min="0" max="64" value="0" style="width:200px; cursor:pointer;">
             </div>
             <div style="display:flex; gap:20px;">
-                <button id="ic-modal-toggle-edge" style="display:none; padding:12px 20px; background:#555; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:16px; transition:background 0.2s;">${t('🔆 Highlight Edge Fix')}</button>
-                <button id="ic-modal-discard" style="padding:12px 40px; background:#444; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:16px; transition:background 0.2s;">${t('❌ Discard')}</button>
-                <button id="ic-modal-apply" style="padding:12px 40px; background:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:16px; transition:background 0.2s;">${t('✅ Apply Changes')}</button>
+                <button id="ic-modal-toggle-edge" class="res-preset-btn" style="display:none; padding:0 20px; height: 44px; font-size:15px;">${t('🔆 Highlight Edge Fix')}</button>
+                <button id="ic-modal-discard" class="res-preset-btn" style="padding:0 40px; height: 44px; font-size:15px;">${t('❌ Discard')}</button>
+                <button id="ic-modal-apply" class="res-preset-btn primary" style="padding:0 40px; height: 44px; font-size:15px;">${t('✅ Apply Changes')}</button>
             </div>
         </div>
     </div>`;
@@ -113,14 +113,14 @@ const IC_ICONS = {
             
             <div style="display: flex; gap: 12px; margin-bottom: 24px;">
                 <input type="text" id="ic-projects-name-input" value="project" placeholder="${t('Project Name')}" style="flex: 1; box-sizing: border-box; height: 44px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); border: none; border-radius: 12px; color: var(--body-text-color, #fff); padding: 0 16px; outline: none; font-size: 15px; font-weight: 500; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
-                <button id="ic-projects-save-btn" class="fluent-card" style="box-sizing: border-box; height: 44px; padding: 0 20px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 85%, cornflowerblue); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--body-text-color, #fff); margin: 0; border: none;">
+                <button id="ic-projects-save-btn" class="res-preset-btn primary" style="height: 44px; padding: 0 20px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0;">
                     <span style="font-size: 18px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.save}</span> ${t('Save')}
                 </button>
             </div>
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-weight: 700;">${t('Existing Projects')}</div>
-                <button id="ic-projects-import-btn" class="fluent-card" style="padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--body-text-color, #fff);">
+                <button id="ic-projects-import-btn" class="res-preset-btn" style="height: 36px; padding: 0 14px; font-size: 13px; display: flex; align-items: center; gap: 6px;">
                     <span style="font-size: 16px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.import}</span> ${t('Import Project')}
                 </button>
             </div>
@@ -148,10 +148,10 @@ const IC_ICONS = {
             </div>
             
             <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                <button id="ic-recover-btn-no" class="fluent-card" style="box-sizing: border-box; height: 36px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.1); color: var(--body-text-color, #fff); border: none;">
+                <button id="ic-recover-btn-no" class="res-preset-btn" style="height: 36px; padding: 0 20px; font-size: 14px; display: flex; align-items: center; justify-content: center;">
                     ${typeof t === 'function' ? t('No, load original') : 'No, load original'}
                 </button>
-                <button id="ic-recover-btn-yes" class="fluent-card" style="box-sizing: border-box; height: 36px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 85%, cornflowerblue); color: var(--body-text-color, #fff); border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <button id="ic-recover-btn-yes" class="res-preset-btn primary" style="height: 36px; padding: 0 20px; font-size: 14px; display: flex; align-items: center; justify-content: center;">
                     ${typeof t === 'function' ? t('Yes, recover') : 'Yes, recover'}
                 </button>
             </div>
@@ -356,8 +356,8 @@ const IC_ICONS = {
     });
 
     document.addEventListener('mousedown', function(e) {
-        // Prevent click effects if interacting with form controls directly
-        if (e.target.closest('input, select, textarea, button, .ic-slider-handle')) return;
+        // Prevent click effects on the container when interacting with form inputs
+        if (e.target.closest('input, select, textarea, .ic-slider-handle')) return;
 
         const target = e.target.closest('.fluent-card, #ic-nodes-toggle, #ic-nodes-panel button, .ic-pipeline-node, .res-preset-btn');
         if (!target) return;
@@ -839,38 +839,42 @@ const IC_ICONS = {
         });
         document.getElementById('ic_float_download')?.addEventListener('click', () => {
             if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
-                window.ic_stitchTilesToBlob((blob) => {
-                    if (blob) {
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'canvas.png';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }
-                });
+                const nameField = document.getElementById('ic-projects-name-input');
+                const projName = (nameField && nameField.value.trim() !== '') ? encodeURIComponent(nameField.value.trim()) : 'canvas';
+                const url = `/infinite-canvas-api/download?name=${projName}`;
+                
+                const a = document.createElement('a');
+                a.href = url;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
         });
         const floatCopyBtn = document.getElementById('ic_float_copy');
         if (floatCopyBtn) {
             floatCopyBtn.addEventListener('click', () => {
                 if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
-                    window.ic_stitchTilesToBlob((blob) => {
-                        if (blob) {
-                            const item = new ClipboardItem({ 'image/png': blob });
-                            navigator.clipboard.write([item]).then(() => {
-                                const oldText = floatCopyBtn.innerText;
-                                floatCopyBtn.innerText = typeof t === 'function' ? t('Copied!') : 'Copied!';
-                                setTimeout(() => {
-                                    floatCopyBtn.innerText = oldText;
-                                }, 2000);
-                            }).catch(e => {
-                                console.error('Copy failed:', e);
-                            });
-                        }
-                    });
+                    const originalText = floatCopyBtn.innerText;
+                    floatCopyBtn.innerText = "Copying...";
+                    fetch('/infinite-canvas-api/download')
+                        .then(res => res.blob())
+                        .then(blob => {
+                            if (blob) {
+                                const item = new ClipboardItem({ 'image/png': blob });
+                                navigator.clipboard.write([item]).then(() => {
+                                    floatCopyBtn.innerText = typeof t === 'function' ? t('Copied!') : 'Copied!';
+                                    setTimeout(() => {
+                                        floatCopyBtn.innerText = originalText;
+                                    }, 2000);
+                                }).catch(e => {
+                                    console.error('Copy failed:', e);
+                                    floatCopyBtn.innerText = originalText;
+                                });
+                            }
+                        }).catch(e => {
+                            console.error('Fetch failed:', e);
+                            floatCopyBtn.innerText = originalText;
+                        });
                 }
             });
         }
