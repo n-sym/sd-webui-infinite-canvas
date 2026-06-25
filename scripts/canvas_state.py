@@ -459,7 +459,7 @@ class CanvasState:
         self.canvas_bounds_prev = self.canvas_bounds.copy()
             
         # 1. Scale Canvas if Zoom-in (Target drawn small)
-        target_max = max(target_rect['w'], target_rect['h'])
+        target_max = max(source_rect['w'], source_rect['h'])
         requested_scale = generation_res / target_max if target_max > 0 else 1.0
         
         self._ensure_bounds_cover_tiles()
@@ -467,7 +467,6 @@ class CanvasState:
         actual_canvas_scale = 1.0
         if requested_scale > 1.0 and auto_scale:
             current_max_dim = max(self.canvas_bounds['w'], self.canvas_bounds['h'])
-            print(f"!!!{self.canvas_bounds['w'], self.canvas_bounds['h']}")
             max_allowed_scale = self.max_size / current_max_dim if current_max_dim > 0 else 1.0
             actual_canvas_scale = min(requested_scale, max_allowed_scale)
             
@@ -545,7 +544,7 @@ class CanvasState:
         
         # 4. We must resize source_crop so the model processes it such that Target is generation_res.
         # This is important if requested_scale was clamped by max_size, or if requested_scale < 1.0.
-        final_target_max = max(target_rect['w'], target_rect['h'])
+        final_target_max = max(source_rect['w'], source_rect['h'])
         model_scale = generation_res / final_target_max if final_target_max > 0 else 1.0
         
         final_sw = int(source_crop.width * model_scale)

@@ -441,7 +441,7 @@ class FinalizeStateStep(GenerationStep):
         paste_mask = ctx.get(PasteMask)
         prep = ctx.get(PreparedCanvas)
         
-        canvas_state.set_pending_result(result_img, csr, paste_mask, cc.downscale_algo, edge_fix_mask=edge_fix_mask_img)
+        canvas_state.set_pending_result(result_img, prep['canvas_source_rect'], paste_mask, cc.downscale_algo, edge_fix_mask=edge_fix_mask_img)
         
         def to_b64(img):
             buffered = BytesIO()
@@ -460,8 +460,8 @@ class FinalizeStateStep(GenerationStep):
             "scale": prep['transform']['scale'],
             "pad_left": prep['transform']['pad_left'],
             "pad_top": prep['transform']['pad_top'],
-            "rect_x": csr['x'],
-            "rect_y": csr['y']
+            "rect_x": prep['canvas_source_rect']['x'],
+            "rect_y": prep['canvas_source_rect']['y']
         }
         if edge_mask_b64:
             payload["edge_mask"] = edge_mask_b64

@@ -667,9 +667,9 @@ window.ic_update_syntax = function(textarea) {
         if (!buffer) return;
         const escaped = buffer.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         if (currentStyle) {
-            html += `<span style="${currentStyle}">${escaped}</span>`;
+            html += `<span class="notranslate" translate="no" style="${currentStyle}">${escaped}</span>`;
         } else {
-            html += escaped;
+            html += `<span class="notranslate" translate="no">${escaped}</span>`;
         }
         buffer = '';
     };
