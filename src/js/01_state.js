@@ -287,71 +287,128 @@ const IC_ICONS = {
             }
         }
     </style>
-    <div id="ic-nodes-overlay" onclick="if(event.target === this) window.ic_action_toggle_node_manager()" style="position:absolute; top:0; left:0; right:0; bottom:0; z-index:1500; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); font-family:sans-serif; opacity:0; pointer-events:none; transition:opacity 0.2s;">
-        <div id="ic-nodes-wrapper" style="display:flex; flex-direction:row; align-items:center; justify-content:center; height:85%; max-height:800px; transform:scale(0.95); transition:transform 0.2s cubic-bezier(0.4,0,0.2,1); pointer-events:none;">
-            <div id="ic-nodes-panel" class="fluent-panel" style="pointer-events:none; cursor:default; display:flex; flex-direction:column; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.4); border-radius:24px; box-shadow: 0 8px 32px rgba(0,0,0,0.2), inset 1px 1px 0 rgba(255,255,255,0.2); width:750px; height:100%; overflow:hidden; z-index:1; position:relative;">
-                
-                <!-- Header -->
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.1);">
-                    <h3 id="ic-sidebar-title" style="margin: 0; font-size: 15px; font-weight: 700; color: var(--body-text-color, #fff);">${typeof t === 'function' ? t('Node Manager') : 'Node Manager'}</h3>
-                    <button id="ic-nodes-close-btn" type="button" title="Close" style="flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important; border-radius: 8px !important; background: var(--background-fill-secondary, rgba(128,128,128,0.15)) !important; color: var(--body-text-color, #fff) !important; cursor: pointer !important; box-sizing: border-box !important; margin: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.1s;" onmousedown="this.style.transform='scale(0.85)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--background-fill-secondary, rgba(128,128,128,0.15))'" onclick="window.ic_action_toggle_node_manager()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                </div>
-
-                <!-- Body -->
-                <div style="display:flex; flex-direction:row; flex:1; overflow:hidden;">
-                    <!-- Nodes List Column -->
-                    <div style="width:260px; padding:20px; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,0.1);">
-                        <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
-                    </div>
-                    
-                    <!-- Settings Column -->
-                    <div style="flex:1; padding:20px; display:flex; flex-direction:column; position:relative;">
-                        <div id="ic-nodes-search-wrap" class="fluent-card" style="position:absolute; top:20px; left:20px; right:20px; height:42px; box-sizing:border-box; z-index:10; border-radius:24px; background:rgba(255,255,255,0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--border-color-primary, rgba(128,128,128,0.2)); transition: border-color 0.2s, background 0.2s;">
-                            <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.4; color:var(--body-text-color, white); pointer-events:none; font-size: 18px; display: inline-flex;">${IC_ICONS.search}</span>
-                            <input type="text" id="ic-nodes-search" placeholder="${typeof t === 'function' ? t('Search settings...') : 'Search settings...'}" style="width:100%; height:100%; box-sizing:border-box; padding:0 16px 0 40px; margin:0; background:transparent; border:none !important; box-shadow:none !important; color:var(--body-text-color, white); font-size:13px; outline:none; line-height:40px;" onfocus="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--color-accent, cornflowerblue)';" onblur="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" />
-                        </div>
-                        <div id="ic-nodes-settings-col" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>`;
+    `;
     container.insertAdjacentHTML('beforeend', nodesOverlayHTML);
 
-    window.ic_action_toggle_node_manager = function() {
-        const overlay = document.getElementById('ic-nodes-overlay');
-        const wrapper = document.getElementById('ic-nodes-wrapper');
-        const panel = document.getElementById('ic-nodes-panel');
-        if (!overlay || !wrapper) return;
+    let nodeManagerInitialized = false;
+    
+    function initNodeManagerWindow() {
+        if (nodeManagerInitialized) return;
+        if (!window.makeIcWindow) {
+            setTimeout(initNodeManagerWindow, 100);
+            return;
+        }
         
-        if (overlay.style.opacity === '1') {
-            overlay.style.opacity = '0';
-            overlay.style.pointerEvents = 'none';
-            if (panel) panel.style.pointerEvents = 'none';
-            wrapper.style.transform = 'scale(0.95)';
+        const nodeManagerHtmlContent = `
+            <!-- Body -->
+            <div id="ic-nodes-body" style="display:flex; flex-direction:row; flex:1; overflow:hidden;">
+                <!-- Nodes List Column -->
+                <div id="ic-nodes-left-col" style="width:260px; padding:6px 10px 6px 0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,0.1); box-sizing:border-box; flex-shrink: 0;">
+                    <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
+                </div>
+                
+                <!-- Settings Column -->
+                <div id="ic-nodes-right-col" style="width:460px; padding:6px 0 6px 10px; display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; flex-shrink: 0; opacity: 1; transition: opacity 0.2s;">
+                    <div id="ic-nodes-search-wrap" class="fluent-card" style="position:relative; margin-bottom:10px; height:42px; flex-shrink:0; box-sizing:border-box; z-index:10; border-radius:24px; background:rgba(255,255,255,0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--border-color-primary, rgba(128,128,128,0.2)); transition: border-color 0.2s, background 0.2s;">
+                        <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.4; color:var(--body-text-color, white); pointer-events:none; font-size: 18px; display: inline-flex;">${IC_ICONS.search}</span>
+                        <input type="text" id="ic-nodes-search" placeholder="${typeof t === 'function' ? t('Search settings...') : 'Search settings...'}" style="width:100%; height:100%; box-sizing:border-box; padding:0 16px 0 40px; margin:0; background:transparent; border:none !important; box-shadow:none !important; color:var(--body-text-color, white); font-size:13px; outline:none; line-height:40px;" onfocus="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--color-accent, cornflowerblue)';" onblur="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" />
+                    </div>
+                    <div id="ic-nodes-settings-col" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                </div>
+            </div>
+        `;
+
+        window.makeIcWindow({
+            id: 'ic-nodes-panel',
+            title: 'Node Manager',
+            contentHtml: nodeManagerHtmlContent,
+            width: '720px',
+            height: '70vh',
+            defaultTop: '100px',
+            defaultLeft: '100px',
+            onClose: 'window.ic_action_toggle_node_manager',
+            onCollapse: 'window.ic_action_toggle_node_manager_fold'
+        });
+
+        document.getElementById('ic-nodes-search').addEventListener('input', function(e) {
+            const query = e.target.value.toLowerCase();
+            const settingsCol = document.getElementById('ic-nodes-settings-col');
+            if (!settingsCol) return;
+            const groups = settingsCol.querySelectorAll('.ic-plugin-setting-group');
+            groups.forEach(group => {
+                const text = group.innerText.toLowerCase();
+                if (text.includes(query)) {
+                    group.style.display = 'block';
+                } else {
+                    group.style.display = 'none';
+                }
+            });
+        });
+
+        nodeManagerInitialized = true;
+    }
+    
+    // Attempt initialization
+    setTimeout(initNodeManagerWindow, 100);
+
+    window.ic_action_toggle_node_manager = function() {
+        const panel = document.getElementById('ic-nodes-panel');
+        if (!panel) return;
+        
+        if (panel.style.opacity === '1') {
+            panel.style.opacity = '0';
+            panel.style.pointerEvents = 'none';
+            panel.style.transform = 'scale(0.95)';
         } else {
-            overlay.style.opacity = '1';
-            overlay.style.pointerEvents = 'auto';
-            if (panel) panel.style.pointerEvents = 'auto';
-            wrapper.style.transform = 'scale(1)';
+            if (window.icBringToFront) window.icBringToFront(panel);
+            panel.style.opacity = '1';
+            panel.style.pointerEvents = 'auto';
+            panel.style.transform = 'scale(1)';
+            if (window.ic_sync_node_manager_state) {
+                window.ic_sync_node_manager_state();
+            }
         }
     };
 
-    document.getElementById('ic-nodes-search').addEventListener('input', function(e) {
-        const query = e.target.value.toLowerCase();
-        const settingsCol = document.getElementById('ic-nodes-settings-col');
-        const groups = settingsCol.querySelectorAll('.ic-plugin-setting-group');
-        groups.forEach(group => {
-            const text = group.innerText.toLowerCase();
-            if (text.includes(query)) {
-                group.style.display = 'block';
-            } else {
-                group.style.display = 'none';
+    window.ic_action_toggle_node_manager_fold = function() {
+        const panel = document.getElementById('ic-nodes-panel');
+        const rightCol = document.getElementById('ic-nodes-right-col');
+        const iconLarge = document.getElementById('ic-nodes-panel-icon-large');
+        const iconSmall = document.getElementById('ic-nodes-panel-icon-small');
+        const toggleBtn = document.getElementById('ic-nodes-panel-toggle');
+        if (!panel || !rightCol) return;
+
+        const isCollapsed = (panel.getAttribute('data-ic-state') === 'collapsed');
+        if (isCollapsed) {
+            // Expand
+            panel.setAttribute('data-ic-state', 'expanded');
+            panel.style.width = '720px';
+            rightCol.style.opacity = '1';
+            rightCol.style.pointerEvents = 'auto';
+
+            if (iconLarge && iconSmall) {
+                iconLarge.style.strokeDasharray = "none";
+                iconLarge.style.opacity = "1";
+                iconSmall.style.strokeDasharray = "2 4";
+                iconSmall.style.opacity = "0.5";
             }
-        });
-    });
+            if (toggleBtn) toggleBtn.title = (typeof t === 'function' ? t('Collapse') : 'Collapse');
+        } else {
+            // Collapse
+            panel.setAttribute('data-ic-state', 'collapsed');
+            panel.style.width = '260px'; // exactly the width of left column content
+            rightCol.style.opacity = '0';
+            rightCol.style.pointerEvents = 'none';
+
+            if (iconLarge && iconSmall) {
+                iconLarge.style.strokeDasharray = "2 4";
+                iconLarge.style.opacity = "0.5";
+                iconSmall.style.strokeDasharray = "none";
+                iconSmall.style.opacity = "1";
+            }
+            if (toggleBtn) toggleBtn.title = (typeof t === 'function' ? t('Expand') : 'Expand');
+        }
+    };
 
     // Fluent Design & Ripple Effects (Global) - OPTIMIZED
     let lastHoveredCards = new Set();
@@ -552,7 +609,10 @@ const IC_ICONS = {
                         </div>
                     </div>
                 </div>
-                <div class="ic-menu-action" onclick="document.getElementById('ic-projects-save-btn')?.click()">${typeof t === 'function' ? t('Save Project') : 'Save Project'}</div>
+                <div class="ic-menu-action" onclick="document.getElementById('ic-projects-save-btn')?.click()" style="display:flex; align-items:center;">
+                    ${typeof t === 'function' ? t('Save Project') : 'Save Project'}
+                    <span class="ic-menu-shortcut">Ctrl+S</span>
+                </div>
                 <div class="ic-menu-action" id="ic-menu-autosave-item" onclick="if(window.ic_action_toggle_autosave) window.ic_action_toggle_autosave()" style="display: flex; align-items: center;">
                     <span id="ic-menu-autosave-check" style="margin-right: 6px; display: none; font-size: 16px;"></span>
                     ${typeof t === 'function' ? t('Autosave') : 'Autosave'}
@@ -582,7 +642,10 @@ const IC_ICONS = {
                 <div class="ic-menu-divider"></div>
                 <div class="ic-menu-action" onclick="window.ic_action_copy()">${typeof t === 'function' ? t('Copy Canvas') : 'Copy Canvas'}</div>
                 <div class="ic-menu-action" onclick="window.ic_action_reset()">${typeof t === 'function' ? t('Reset Canvas') : 'Reset Canvas'}</div>
-                <div class="ic-menu-action" onclick="window.ic_action_clear_mask()">${typeof t === 'function' ? t('Clear Mask') : 'Clear Mask'}</div>
+                <div class="ic-menu-action" onclick="window.ic_action_clear_mask()" style="display:flex; align-items:center;">
+                    ${typeof t === 'function' ? t('Clear Mask') : 'Clear Mask'}
+                    <span class="ic-menu-shortcut">Del</span>
+                </div>
                 <div class="ic-menu-divider"></div>
                 <div class="ic-menu-action" onclick="if(window.ic_autoCrop) window.ic_autoCrop('black')">${typeof t === 'function' ? t('Crop Pure Black') : 'Crop Pure Black'}</div>
                 <div class="ic-menu-action" onclick="if(window.ic_autoCrop) window.ic_autoCrop('white')">${typeof t === 'function' ? t('Crop Pure White') : 'Crop Pure White'}</div>
@@ -606,6 +669,10 @@ const IC_ICONS = {
                 <div class="ic-menu-action" onclick="window.ic_action_toggle_node_manager()" style="display:flex; align-items:center;">
                     ${typeof t === 'function' ? t('Open Node Manager') : 'Open Node Manager'}
                     <span class="ic-menu-shortcut">Ctrl+P</span>
+                </div>
+                <div class="ic-menu-action" onclick="if(window.ic_action_toggle_sidebar) window.ic_action_toggle_sidebar()" style="display:flex; align-items:center;">
+                    ${typeof t === 'function' ? t('Open Generation Parameters') : 'Open Generation Parameters'}
+                    <span class="ic-menu-shortcut">Ctrl+G</span>
                 </div>
             </div>
         </div>
@@ -755,8 +822,7 @@ const IC_ICONS = {
         <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;">
             <!-- Fast Res Button -->
             <button id="ic_float_res_btn" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 14px; font-weight: bold;" title="${typeof t === 'function' ? t('Resolution Preset') : 'Resolution Preset'}">
-                <span style="font-size: 18px; margin-right: 6px; display: inline-flex; vertical-align: middle;">${IC_ICONS.photo_size_select_large || IC_ICONS.rectangle || '📏'}</span>
-                ${typeof t === 'function' ? t('Resolution') : 'Resolution'}
+                ${typeof t === 'function' ? t('Res Preset') : 'Res Preset'}
             </button>
 
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
@@ -775,8 +841,11 @@ const IC_ICONS = {
             
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
 
-            <button id="ic-sidebar-generate-btn" class="res-preset-btn primary" style="height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 12px rgba(100, 149, 237, 0.4);">${t('Generate')}</button>
-            <button id="ic-sidebar-interrupt-btn" class="res-preset-btn" style="display: none; height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; background: #e53e3e !important; color: white !important; box-shadow: 0 4px 12px rgba(229, 62, 62, 0.4) !important;">${t('Interrupt')}</button>
+            <button id="ic-sidebar-generate-btn" class="res-preset-btn primary" style="height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 12px rgba(100, 149, 237, 0.4); display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 100px">
+                <span>${t('Generate')}</span>
+                <span style="font-size: 8px; opacity: 0.7; font-weight: 500;">Ctrl+⏎</span>
+            </button>
+            <button id="ic-sidebar-interrupt-btn" class="res-preset-btn" style="display: none; height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; background: #c44141 !important; color: white !important; box-shadow: 0 4px 12px rgba(229, 62, 62, 0.4) !important; border-radius: 100px">${t('Interrupt')}</button>
             <input type="file" id="ic_float_upload_input" accept=".png,.jpg,.jpeg,.webp" style="display: none;" />
         </div>
         
@@ -1025,6 +1094,22 @@ const IC_ICONS = {
         // Keyboard shortcuts for mask undo/redo: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
         // Also track backtick (`) for debug info
         window.ic_show_debug_info = false;
+        
+        // Intercept Ctrl+Enter globally in capture phase to prevent WebUI from catching it
+        window.addEventListener('keydown', (e) => {
+            const container = document.getElementById('ic-container');
+            if (container && container.style.display !== 'none' && container.offsetParent !== null) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    
+                    if (window.ic_trigger_generate && !window.ic_current_task_id) {
+                        window.ic_trigger_generate();
+                    }
+                }
+            }
+        }, { capture: true });
         document.addEventListener('keydown', (e) => {
             // Only handle when the canvas container is visible and no modal/input is focused
             const active = document.activeElement;
@@ -1038,6 +1123,15 @@ const IC_ICONS = {
             if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 if (window.ic_action_toggle_node_manager) window.ic_action_toggle_node_manager();
+            } else if (e.key === 'g' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                if (window.ic_action_toggle_sidebar) window.ic_action_toggle_sidebar();
+            } else if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                document.getElementById('ic-projects-save-btn')?.click();
+            } else if (e.key === 'Delete') {
+                e.preventDefault();
+                if (window.ic_action_clear_mask) window.ic_action_clear_mask();
             } else if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
                 e.preventDefault();
                 undoMask();
@@ -1250,6 +1344,7 @@ const IC_ICONS = {
                     item.innerText = p.name;
                     item.addEventListener('click', async (e) => {
                         e.stopPropagation(); // prevent parent clicks
+                        if (window.ic_close_menu) window.ic_close_menu();
                         if (window.ic_is_loading_or_saving) return;
                         window.lockProjectUI();
                         if (window.ic_set_project_name) window.ic_set_project_name(p.name);

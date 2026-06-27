@@ -11,10 +11,13 @@ function t(enStr) {
         'Feather Radius (px): ': '羽化强度 (px): ',
         'Open Node Manager': '打开节点管理器',
         'Node Manager': '节点管理器',
+        'Open Generation Parameters': '打开生成参数',
+        'Generation Parameters': '生成参数',
         'Discard': '放弃更改',
         'Apply Changes': '应用更改',
         'Canvas': '画布',
         'Mask': '蒙版',
+        'View': '视图',
         'Window': '窗口',
         'Reset Canvas': '重置画布',
         'Download Canvas': '下载画布',
@@ -140,7 +143,9 @@ function t(enStr) {
         'Project loaded successfully!': '工程加载成功！',
         'Project saved successfully!': '工程保存成功！',
         'Error: ': '错误：',
-        'Existing Projects': '已有工程'
+        'Existing Projects': '已有工程',
+        'Resolution Preset': '分辨率预设',
+        'Res Preset': '分辨率预设',
     };
     return dict[enStr] || enStr;
 }

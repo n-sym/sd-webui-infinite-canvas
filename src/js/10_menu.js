@@ -47,6 +47,7 @@
         menuBar.querySelectorAll('.ic-submenu').forEach(s => (s.style.display = 'none'));
         openGroup = null;
     }
+    window.ic_close_menu = closeAll;
 
     function openMenu(group) {
         if (openGroup === group) return;

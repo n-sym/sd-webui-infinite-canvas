@@ -1,6 +1,4 @@
-// 08_progress.js
-
-// 08_progress.js
+// 08_toast_and_progress.js
 
 let icLastValidStep = "";
 let icLastValidHue = "0";
@@ -92,12 +90,12 @@ function icUpdateToastThemeForElement(toast, hue) {
         toast.style.backgroundColor = `hsl(${hue}, 45%, 22%)`;
         toast.style.color = `#f0f0f0`;
         toast.style.border = `1px solid hsla(${hue}, 45%, 40%, 0.5)`;
-        toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 80%, 65%)`;
+        toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 60%, 65%)`;
     } else {
         toast.style.backgroundColor = `hsl(${hue}, 85%, 92%)`;
         toast.style.color = `#333333`;
         toast.style.border = `1px solid hsla(${hue}, 85%, 75%, 0.8)`;
-        toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 80%, 45%)`;
+        toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 60%, 45%)`;
     }
 }
 

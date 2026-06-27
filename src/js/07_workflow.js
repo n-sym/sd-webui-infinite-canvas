@@ -357,7 +357,7 @@ async function updateWorkflowUI(data, container) {
 
     // ---- 2. Overlay settings column: is_generation_param==False params ----
     // (includes `enabled`, which toggles the plugin on/off via a checkbox).
-    let settingsHtml = `<div style="padding-top: 55px;">`;
+    let settingsHtml = `<div>`;
     registry.forEach(plugin => {
         if (!plugin.is_plugin) return;
 

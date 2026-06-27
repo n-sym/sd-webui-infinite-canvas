@@ -151,6 +151,265 @@ if (!window.ic_custom_scrollbar_inited) {
     obs.observe(document.body, { childList: true, subtree: true });
 }
 
+    window.ic_highest_z_index = 1000;
+
+    window.icBringToFront = function(element) {
+        if (!element) return;
+        window.ic_highest_z_index++;
+        element.style.zIndex = window.ic_highest_z_index;
+    };
+
+    window.makeIcWindow = function(options) {
+        const {
+            id,
+            title,
+            contentHtml,
+            width = '300px',
+            height = 'auto',
+            maxHeight = '800px',
+            defaultTop = '50px',
+            defaultLeft = '50px',
+            defaultRight = 'auto',
+            isSidebar = false,
+            onClose = null,
+            onCollapse = null,
+            hasClose = true,
+            hasCollapse = true,
+            stateRef = null
+        } = options;
+
+        const onCloseStr = typeof onClose === 'function' ? onClose.name + '()' : (onClose ? onClose + '()' : '');
+        const onCollapseStr = typeof onCollapse === 'function' ? onCollapse.name + '()' : (onCollapse ? onCollapse + '()' : '');
+
+        const html = `
+        <div id="${id}" class="fluent-panel" data-ic-state="expanded" style="
+            position: absolute;
+            top: ${defaultTop};
+            ${defaultLeft !== 'auto' ? `left: ${defaultLeft};` : ''}
+            ${defaultRight !== 'auto' ? `right: ${defaultRight};` : ''}
+            width: ${width};
+            ${height !== 'auto' ? `height: ${height};` : ''}
+            max-height: ${maxHeight};
+            background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15), inset 1px 1px 0 rgba(255,255,255,0.2);
+            z-index: 1000;
+            pointer-events: auto;
+            color: var(--body-text-color, #fff);
+            font-family: sans-serif;
+            cursor: default;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s, transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.95);
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; cursor: move;">
+                <h3 id="${id}-title" style="margin: 0; font-size: 15px; font-weight: 700; pointer-events: none;">${typeof t === 'function' ? t(title) : title}</h3>
+                <div style="display: flex; gap: 6px;">
+                    ${hasCollapse ? `
+                    <button id="${id}-toggle" type="button" title="${typeof t === 'function' ? t('Collapse') : 'Collapse'}" style="flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important; border-radius: 8px !important; background: var(--background-fill-secondary, rgba(128,128,128,0.15)) !important; color: var(--body-text-color, #fff) !important; cursor: pointer !important; box-sizing: border-box !important; margin: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; transition: background 0.2s;" ${onCollapseStr ? 'onclick="' + onCollapseStr + '"' : ''}>
+                        <svg id="${id}-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: all 0.3s ease;">
+                            <rect id="${id}-icon-large" x="5" y="5" width="14" height="14" rx="2" style="transition: all 0.3s ease; stroke-dasharray: none; opacity: 1;"></rect>
+                            <rect id="${id}-icon-small" x="12" y="5" width="7" height="7" rx="1" style="transition: all 0.3s ease; stroke-dasharray: 2 4; opacity: 0.5;"></rect>
+                        </svg>
+                    </button>
+                    ` : ''}
+                    ${hasClose ? `
+                    <button id="${id}-close-btn" type="button" title="Close" style="flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important; border-radius: 8px !important; background: var(--background-fill-secondary, rgba(128,128,128,0.15)) !important; color: var(--body-text-color, #fff) !important; cursor: pointer !important; box-sizing: border-box !important; margin: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; transition: background 0.2s;" ${onCloseStr ? 'onclick="' + onCloseStr + '"' : ''}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    ` : ''}
+                </div>
+            </div>
+            ${contentHtml}
+        </div>
+        `;
+
+        const container = document.getElementById('ic-container') || document.body;
+        container.insertAdjacentHTML('beforeend', html);
+        const winEl = document.getElementById(id);
+        
+        if (window.icMakeDraggableWindow) {
+            window.icMakeDraggableWindow(winEl, {
+                defaultTop,
+                defaultLeft,
+                defaultRight,
+                isSidebar,
+                stateRef
+            });
+        }
+        
+        return winEl;
+    };
+
+    window.icMakeDraggableWindow = function(winEl, options = {}) {
+        const {
+            defaultTop = '56px',
+            defaultRight = '20px',
+            defaultLeft = 'auto',
+            defaultBottom = 'auto',
+            isSidebar = false,
+            stateRef = null
+        } = options;
+
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let initialLeft = 0;
+        let initialTop = 0;
+        let hasMoved = false;
+        let state = stateRef || { left: defaultLeft, right: defaultRight, top: defaultTop };
+
+        // Auto bring to front on mousedown
+        winEl.addEventListener('mousedown', (e) => {
+            window.icBringToFront(winEl);
+            
+            if (isSidebar && winEl.getAttribute('data-ic-state') === 'expanded') return;
+            
+            if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card') || e.target.closest('.ic-menu-action') || e.target.closest('#ic-nodes-close-btn') || e.target.closest('select') || e.target.closest('.ic-pipeline-node') || e.target.closest('.ic-sidebar-prompt-wrap')) {
+                return;
+            }
+
+            isDragging = true;
+            e.preventDefault(); // Prevent text selection
+            hasMoved = false;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+
+            const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+            const rect = winEl.getBoundingClientRect();
+            
+            initialLeft = rect.left - containerRect.left;
+            initialTop = rect.top - containerRect.top;
+            
+            winEl.style.transition = 'none';
+            winEl.style.right = 'auto';
+            winEl.style.bottom = 'auto';
+            winEl.style.left = initialLeft + 'px';
+            winEl.style.top = initialTop + 'px';
+            winEl.style.transform = 'none';
+            
+            if (!document.getElementById('ic-drag-style')) {
+                const style = document.createElement('style');
+                style.id = 'ic-drag-style';
+                style.innerHTML = `* { user-select: none !important; -webkit-user-select: none !important; } textarea, input { pointer-events: none !important; }`;
+                document.head.appendChild(style);
+            }
+            if (window.getSelection) window.getSelection().removeAllRanges();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+            
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
+            
+            if (hasMoved) {
+                const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+                const rect = winEl.getBoundingClientRect();
+                const toolbar = document.getElementById('ic-floating-toolbar');
+                const menuBar = document.getElementById('ic-menu-bar');
+                
+                let newLeft = initialLeft + dx;
+                let newTop = initialTop + dy;
+                
+                let minTop = 10;
+                if (menuBar) {
+                    const mRect = menuBar.getBoundingClientRect();
+                    minTop = (mRect.bottom - containerRect.top) + 10;
+                }
+                
+                let maxTop = containerRect.height - rect.height - 10;
+                if (toolbar) {
+                    const tRect = toolbar.getBoundingClientRect();
+                    const toolbarTopInContainer = tRect.top - containerRect.top;
+                    maxTop = Math.min(maxTop, toolbarTopInContainer - rect.height - 10);
+                }
+                
+                newLeft = Math.max(10, Math.min(newLeft, containerRect.width - rect.width - 10));
+                newTop = Math.max(minTop, Math.min(newTop, maxTop));
+                
+                winEl.style.left = newLeft + 'px';
+                winEl.style.top = newTop + 'px';
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            const dragStyle = document.getElementById('ic-drag-style');
+            if (dragStyle) dragStyle.remove();
+            
+            if (isSidebar) {
+                winEl.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            } else {
+                winEl.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s, transform 0.2s';
+            }
+            
+            if (hasMoved) {
+                const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+                const rect = winEl.getBoundingClientRect();
+                
+                const isRightHalf = (rect.left + rect.width / 2) > (containerRect.width / 2);
+                state.top = (rect.top - containerRect.top) + 'px';
+                
+                if (isRightHalf) {
+                    const rightDist = containerRect.width - (rect.left - containerRect.left + rect.width);
+                    state.right = rightDist + 'px';
+                    state.left = 'auto';
+                    
+                    winEl.style.left = 'auto';
+                    winEl.style.right = rightDist + 'px';
+                } else {
+                    const leftDist = rect.left - containerRect.left;
+                    state.left = leftDist + 'px';
+                    state.right = 'auto';
+                    
+                    winEl.style.left = leftDist + 'px';
+                    winEl.style.right = 'auto';
+                }
+            }
+        });
+
+        winEl.addEventListener('dblclick', (e) => {
+            if (isSidebar && winEl.getAttribute('data-ic-state') === 'expanded') return;
+            if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card') || e.target.closest('.ic-menu-action') || e.target.closest('select') || e.target.closest('.ic-pipeline-node') || e.target.closest('.ic-sidebar-prompt-wrap')) return;
+            
+            if (isSidebar) {
+                winEl.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            } else {
+                winEl.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            }
+            
+            winEl.style.left = defaultLeft;
+            winEl.style.top = defaultTop;
+            winEl.style.right = defaultRight;
+            winEl.style.bottom = defaultBottom;
+            winEl.style.transform = 'none';
+            
+            state.left = defaultLeft;
+            state.right = defaultRight;
+            state.top = defaultTop;
+            
+            setTimeout(() => {
+                if (isSidebar) {
+                    winEl.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                } else {
+                    winEl.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s, transform 0.2s';
+                }
+            }, 300);
+        });
+    };
+
 function initICSidebar() {
     const container = document.getElementById('ic-container');
     if (!container) return;
@@ -167,60 +426,40 @@ function initICSidebar() {
     // The collapsed prompt mirrors the expanded one because both carry
     // class="ic-node-param" data-param-name="prompt" data-node-id="parse_input",
     // and sendWorkflowUpdate already mirrors values across matching inputs.
-    const sidebarHTML = `
-    <div id="ic-sidebar" class="fluent-panel" data-ic-state="collapsed" style="
-        position: absolute;
-        top: 56px;
-        right: 20px;
-        width: 340px;
-        background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        padding: 14px;
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15), inset 1px 1px 0 rgba(255,255,255,0.2);
-        z-index: 1000;
-        pointer-events: auto;
-        color: var(--body-text-color, #fff);
-        font-family: sans-serif;
-        cursor: default;
-        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    ">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0;">
-            <h3 id="ic-sidebar-title" style="margin: 0; font-size: 15px; font-weight: 700;">${typeof t === 'function' ? t('Generation Parameters') : 'Generation Parameters'}</h3>
-            <button id="ic-sidebar-toggle" type="button" title="${typeof t === 'function' ? t('Expand') : 'Expand'}" style="flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important; border-radius: 8px !important; background: var(--background-fill-secondary, rgba(128,128,128,0.15)) !important; color: var(--body-text-color, #fff) !important; cursor: pointer !important; box-sizing: border-box !important; margin: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center;">
-                <svg id="ic-sidebar-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: all 0.3s ease;">
-                    <rect id="ic-sidebar-icon-large" x="5" y="5" width="14" height="14" rx="2" style="transition: all 0.3s ease; stroke-dasharray: 2 4; opacity: 0.5;"></rect>
-                    <rect id="ic-sidebar-icon-small" x="12" y="5" width="7" height="7" rx="1" style="transition: all 0.3s ease; stroke-dasharray: none; opacity: 1;"></rect>
-                </svg>
-            </button>
-        </div>
-
-        <!-- Collapsed: dedicated prompt-only textarea. Intentionally NOT a
-             .ic-node-param — it's a UI affordance only. Its onchange calls
-             sendWorkflowUpdate(this), which mirrors the value into the
-             authoritative prompt textarea inside #ic_workflow_html (found via
-             data-node-id/data-param-name). That way the expanded prompt stays
-             the single source of truth for scraping. -->
-        <div id="ic-sidebar-prompt-wrap" style="position: relative; width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); border-radius: 12px; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; overflow: hidden; min-height: 32px; flex-shrink: 0; display: block;">
+    const sidebarHtmlContent = `
+        <!-- Collapsed: dedicated prompt-only textarea. -->
+        <div id="ic-sidebar-prompt-wrap" style="position: relative; width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)); border-radius: 12px; transition: border-color 0.2s, max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; overflow: hidden; min-height: 32px; flex-shrink: 0; display: none;">
             <div class="ic-syntax-overlay notranslate" translate="no" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 6px 8px; box-sizing: border-box; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; color: var(--body-text-color, #fff); pointer-events: none; overflow: hidden; margin: 0; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0px; text-transform: none; text-indent: 0px; text-shadow: none; font-weight: 400; font-variant-ligatures: none; font-kerning: none; -webkit-text-size-adjust: 100%; tab-size: 4;"></div>
             <textarea id="ic-sidebar-prompt" data-node-id="parse_input" data-param-name="prompt" rows="2" placeholder="${typeof t === 'function' ? t('提示词') : '提示词'}" style="position: relative; z-index: 1; width: 100%; box-sizing: border-box; resize: none; min-height: 32px; overflow-y: auto; overflow-x: hidden; background: transparent; border: none; color: transparent; caret-color: var(--body-text-color, #fff); padding: 6px 8px; outline: none; box-shadow: none !important; margin: 0; display: block; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0px; text-transform: none; text-indent: 0px; text-shadow: none; font-weight: 400; font-variant-ligatures: none; font-kerning: none; -webkit-text-size-adjust: 100%; tab-size: 4;" onfocus="this.parentElement.style.borderColor='var(--color-accent, cornflowerblue)'; if(window.ic_update_syntax) window.ic_update_syntax(this);" onblur="this.parentElement.style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))'; if(window.ic_update_syntax) window.ic_update_syntax(this);" oninput="this.style.height='auto';this.style.height=Math.max(32,this.scrollHeight)+'px'; if(window.ic_update_syntax) window.ic_update_syntax(this);" onscroll="this.previousElementSibling.scrollTop = this.scrollTop;" onclick="if(window.ic_update_syntax) window.ic_update_syntax(this);" onkeyup="if(window.ic_update_syntax) window.ic_update_syntax(this);" onchange="sendWorkflowUpdate(this)"></textarea>
         </div>
 
-        <!-- Expanded: the full param/plugin cards rendered by 07_workflow.js.
-             Uses max-height + opacity transition (NOT display:none↔block) so
-             the expand/collapse height change animates cleanly. -->
-        <div id="ic_workflow_html" style="flex: 1; overflow-y: auto; max-height: 0; opacity: 0; transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;"></div>
-    </div>
+        <!-- Expanded: the full param/plugin cards rendered by 07_workflow.js. -->
+        <div id="ic_workflow_html" style="flex: 1; overflow-y: auto; opacity: 1; transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;"></div>
     `;
 
-    container.insertAdjacentHTML('beforeend', sidebarHTML);
+    const collapsedState = { left: 'auto', right: '20px', top: '56px' };
+    
+    // We will attach an inline toggle logic for sidebar specific sizing using addEventListener below
+    // We pass onClose string to use the global window function
+    const sidebar = window.makeIcWindow({
+        id: 'ic-sidebar',
+        title: 'Generation Parameters',
+        contentHtml: sidebarHtmlContent,
+        width: '340px',
+        defaultTop: '56px',
+        defaultLeft: 'auto',
+        defaultRight: '20px',
+        isSidebar: true,
+        onClose: 'window.ic_action_toggle_sidebar',
+        stateRef: collapsedState
+        // onCollapse logic is complex for sidebar, we bind it manually below.
+    });
+    
+    // Sidebar should be visible by default on page load
+    sidebar.style.opacity = '1';
+    sidebar.style.pointerEvents = 'auto';
+    sidebar.style.transform = 'scale(1)';
 
-    const sidebar = document.getElementById('ic-sidebar');
     const toggleBtn = document.getElementById('ic-sidebar-toggle');
     const iconLarge = document.getElementById('ic-sidebar-icon-large');
     const iconSmall = document.getElementById('ic-sidebar-icon-small');
@@ -229,138 +468,21 @@ function initICSidebar() {
     const workflowHtml = document.getElementById('ic_workflow_html');
     const titleEl = document.getElementById('ic-sidebar-title');
 
-    // Drag state
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-    let hasMoved = false;
+    setSidebarState('collapsed');
 
-    // Remember collapsed position constraints
-    let collapsedState = {
-        left: 'auto',
-        right: '20px',
-        top: '56px'
+    window.ic_action_toggle_sidebar = function() {
+        if (!sidebar) return;
+        if (sidebar.style.opacity === '0') {
+            window.icBringToFront(sidebar);
+            sidebar.style.opacity = '1';
+            sidebar.style.pointerEvents = 'auto';
+            sidebar.style.transform = 'scale(1)';
+        } else {
+            sidebar.style.opacity = '0';
+            sidebar.style.pointerEvents = 'none';
+            sidebar.style.transform = 'scale(0.95)';
+        }
     };
-
-    sidebar.addEventListener('mousedown', (e) => {
-        if (sidebar.getAttribute('data-ic-state') === 'expanded') return;
-        
-        // Ignore interactive elements
-        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card')) {
-            return;
-        }
-
-        isDragging = true;
-        hasMoved = false;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-
-        const containerRect = document.getElementById('ic-container').getBoundingClientRect();
-        const rect = sidebar.getBoundingClientRect();
-        
-        initialLeft = rect.left - containerRect.left;
-        initialTop = rect.top - containerRect.top;
-        
-        sidebar.style.transition = 'none'; // Disable transition during drag
-        sidebar.style.right = 'auto';
-        sidebar.style.bottom = 'auto';
-        sidebar.style.left = initialLeft + 'px';
-        sidebar.style.top = initialTop + 'px';
-        sidebar.style.transform = 'none';
-        
-        document.body.style.userSelect = 'none';
-    });
-
-    window.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
-        
-        if (hasMoved) {
-            const containerRect = document.getElementById('ic-container').getBoundingClientRect();
-            const rect = sidebar.getBoundingClientRect();
-            const toolbar = document.getElementById('ic-floating-toolbar');
-            const menuBar = document.getElementById('ic-menu-bar');
-            
-            let newLeft = initialLeft + dx;
-            let newTop = initialTop + dy;
-            
-            // Top bounds (menu bar + padding)
-            let minTop = 10;
-            if (menuBar) {
-                const mRect = menuBar.getBoundingClientRect();
-                minTop = (mRect.bottom - containerRect.top) + 10;
-            }
-            
-            // Bottom bounds (floating toolbar + padding)
-            let maxTop = containerRect.height - rect.height - 10;
-            if (toolbar) {
-                const tRect = toolbar.getBoundingClientRect();
-                const toolbarTopInContainer = tRect.top - containerRect.top;
-                maxTop = Math.min(maxTop, toolbarTopInContainer - rect.height - 10);
-            }
-            
-            // Constrain to container
-            newLeft = Math.max(10, Math.min(newLeft, containerRect.width - rect.width - 10));
-            newTop = Math.max(minTop, Math.min(newTop, maxTop));
-            
-            sidebar.style.left = newLeft + 'px';
-            sidebar.style.top = newTop + 'px';
-        }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-        if (!isDragging) return;
-        isDragging = false;
-        document.body.style.userSelect = '';
-        sidebar.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        
-        if (hasMoved) {
-            const containerRect = document.getElementById('ic-container').getBoundingClientRect();
-            const rect = sidebar.getBoundingClientRect();
-            
-            const isRightHalf = (rect.left + rect.width / 2) > (containerRect.width / 2);
-            collapsedState.top = (rect.top - containerRect.top) + 'px';
-            
-            if (isRightHalf) {
-                const rightDist = containerRect.width - (rect.left - containerRect.left + rect.width);
-                collapsedState.right = rightDist + 'px';
-                collapsedState.left = 'auto';
-                
-                sidebar.style.left = 'auto';
-                sidebar.style.right = rightDist + 'px';
-            } else {
-                const leftDist = rect.left - containerRect.left;
-                collapsedState.left = leftDist + 'px';
-                collapsedState.right = 'auto';
-                
-                sidebar.style.left = leftDist + 'px';
-                sidebar.style.right = 'auto';
-            }
-        }
-    });
-
-    sidebar.addEventListener('dblclick', (e) => {
-        if (sidebar.getAttribute('data-ic-state') === 'expanded') return;
-        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card')) return;
-        
-        sidebar.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        sidebar.style.left = 'auto';
-        sidebar.style.top = '56px';
-        sidebar.style.right = '20px';
-        sidebar.style.bottom = 'auto';
-        sidebar.style.transform = 'none';
-        
-        collapsedState = { left: 'auto', right: '20px', top: '56px' };
-        
-        setTimeout(() => {
-            sidebar.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        }, 300);
-    });
 
     function setSidebarState(state) {
         const expanded = (state === 'expanded');
