@@ -10,7 +10,10 @@ const IC_ICONS = {
     crop: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M240-240v-480h-80v-80h80v-80h80v80h480v80H320v400h80v80h-80v80h-80v-80H240Zm400-160v-320H400v-80h320v400h-80Z"/></svg>`,
     projects: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640v400q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H447l-80-80H160v480Zm0 0v-480 480Z"/></svg>`,
     save: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM480-240q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/></svg>`,
-    import: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M260-160q-42 0-71-29t-29-71v-440q0-42 29-71t71-29h440q42 0 71 29t29 71v440q0 42-29 71t-71 29H260Zm0-80h440v-440H260v440Zm220-60 160-160-56-56-64 64v-168h-80v168l-64-64-56 56 160 160Zm-220 60v-440 440Z"/></svg>`
+    import: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M260-160q-42 0-71-29t-29-71v-440q0-42 29-71t71-29h440q42 0 71 29t29 71v440q0 42-29 71t-71 29H260Zm0-80h440v-440H260v440Zm220-60 160-160-56-56-64 64v-168h-80v168l-64-64-56 56 160 160Zm-220 60v-440 440Z"/></svg>`,
+    check: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>`,
+    chevron_right: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"/></svg>`,
+    close: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="1em" height="1em" fill="currentColor"><path d="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>`
 };
 
     const canvas = document.getElementById('ic-canvas');
@@ -74,26 +77,25 @@ const IC_ICONS = {
     
     // Inject Modal HTML
     const modalHTML = `
-    <div id="ic-modal-overlay" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2500; flex-direction:column; font-family:sans-serif;">
+    <div id="ic-modal-overlay" style="display:none; position:absolute; top:36px; left:0; width:100%; height:calc(100% - 36px); background:rgba(0,0,0,0.85); z-index:2400; flex-direction:column; font-family:sans-serif;">
         <div style="flex:1; display:flex; flex-direction:row; overflow:hidden;">
-            <div style="flex:1; position:relative; border-right:2px solid #222;">
+            <div style="flex:1; position:relative; border-right:2px solid var(--border-color-primary, #ccc); background-color: var(--checker-bg, #ffffff); background-image: linear-gradient(45deg, var(--checker-fg, #dfdfdf) 25%, transparent 25%, transparent 75%, var(--checker-fg, #dfdfdf) 75%, var(--checker-fg, #dfdfdf)), linear-gradient(45deg, var(--checker-fg, #dfdfdf) 25%, transparent 25%, transparent 75%, var(--checker-fg, #dfdfdf) 75%, var(--checker-fg, #dfdfdf)); background-size: 16px 16px; background-position: 0 0, 8px 8px;">
                 <div style="position:absolute; top:15px; left:15px; background:rgba(0,0,0,0.7); color:white; padding:8px 12px; border-radius:6px; z-index:10; font-size:14px; pointer-events:none;">${t('Before')}</div>
                 <canvas id="ic-modal-canvas-old" style="width:100%; height:100%; cursor:grab;"></canvas>
             </div>
-            <div style="flex:1; position:relative;">
+            <div style="flex:1; position:relative; background-color: var(--checker-bg, #ffffff); background-image: linear-gradient(45deg, var(--checker-fg, #dfdfdf) 25%, transparent 25%, transparent 75%, var(--checker-fg, #dfdfdf) 75%, var(--checker-fg, #dfdfdf)), linear-gradient(45deg, var(--checker-fg, #dfdfdf) 25%, transparent 25%, transparent 75%, var(--checker-fg, #dfdfdf) 75%, var(--checker-fg, #dfdfdf)); background-size: 16px 16px; background-position: 0 0, 8px 8px;">
                 <div style="position:absolute; top:15px; left:15px; background:rgba(0,0,0,0.7); color:white; padding:8px 12px; border-radius:6px; z-index:10; font-size:14px; pointer-events:none;">${t('After')}</div>
                 <canvas id="ic-modal-canvas-new" style="width:100%; height:100%; cursor:grab;"></canvas>
             </div>
         </div>
-        <div style="height:70px; background:#1a1a1a; display:flex; align-items:center; justify-content:space-between; padding:0 30px;">
-            <div style="display:flex; align-items:center; gap:15px; color:white;">
-                <label for="ic-modal-feather" style="font-weight:bold; color: white; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">${t('Feather Radius (px): ')}<span id="ic-modal-feather-val">0</span></label>
-                <input type="range" id="ic-modal-feather" min="0" max="64" value="0" style="width:200px; cursor:pointer;">
+        <div class="fluent-panel" style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 20px; padding: 12px 20px; border-radius: 100px; background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.1), inset 1px 1px 0 rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); z-index: 1000; user-select: none;">
+            <div style="display:flex; align-items:center; gap:12px; color:var(--body-text-color, #e0e0e0); margin-right: 10px;">
+                <label for="ic-modal-feather" style="font-weight:600; font-size: 14px;">${t('Feather Radius (px): ')}<span id="ic-modal-feather-val">0</span></label>
+                <input type="range" id="ic-modal-feather" min="0" max="64" value="0" style="width:160px; cursor:pointer;">
             </div>
-            <div style="display:flex; gap:20px;">
-                <button id="ic-modal-toggle-edge" class="res-preset-btn" style="display:none; padding:0 20px; height: 44px; font-size:15px;">${t('🔆 Highlight Edge Fix')}</button>
-                <button id="ic-modal-discard" class="res-preset-btn" style="padding:0 40px; height: 44px; font-size:15px;">${t('❌ Discard')}</button>
-                <button id="ic-modal-apply" class="res-preset-btn primary" style="padding:0 40px; height: 44px; font-size:15px;">${t('✅ Apply Changes')}</button>
+            <div style="display:flex; gap:12px;">
+                <button id="ic-modal-discard" class="res-preset-btn" style="padding: 0px 24px; height: 38px; font-size: 14px; border-radius: 100px;">${t('Discard')}</button>
+                <button id="ic-modal-apply" class="res-preset-btn primary" style="padding: 0px 24px; height: 38px; font-size: 14px; border-radius: 100px;">${t('Apply Changes')}</button>
             </div>
         </div>
     </div>`;
@@ -112,7 +114,7 @@ const IC_ICONS = {
             </div>
             
             <div style="display: flex; gap: 12px; margin-bottom: 24px;">
-                <input type="text" id="ic-projects-name-input" value="project" placeholder="${t('Project Name')}" style="flex: 1; box-sizing: border-box; height: 44px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); border: none; border-radius: 12px; color: var(--body-text-color, #fff); padding: 0 16px; outline: none; font-size: 15px; font-weight: 500; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
+                <input type="text" id="ic-projects-name-input" value="project" placeholder="${typeof t === 'function' ? t('Project Name') : 'Project Name'}" oninput="if(window.ic_set_project_name) window.ic_set_project_name(this.value)" style="flex: 1; box-sizing: border-box; height: 44px; background: color-mix(in srgb, var(--body-background-fill, #1e1e1e) 97%, var(--body-text-color, #fff)); border: none; border-radius: 12px; color: var(--body-text-color, #fff); padding: 0 16px; outline: none; font-size: 15px; font-weight: 500; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">
                 <button id="ic-projects-save-btn" class="res-preset-btn primary" style="height: 44px; padding: 0 20px; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0;">
                     <span style="font-size: 18px; line-height: 1; display: inline-flex; color: cornflowerblue;">${IC_ICONS.save}</span> ${t('Save')}
                 </button>
@@ -210,7 +212,7 @@ const IC_ICONS = {
             position: relative;
             overflow: hidden;
         }
-        .fluent-card::before, .res-preset-btn::before {
+        .fluent-card::before, .res-preset-btn::before, .ic-menu-action::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -221,7 +223,7 @@ const IC_ICONS = {
             opacity: 0;
             transition: opacity 0.3s, background-color 0.3s;
         }
-        .fluent-card:hover::before, .res-preset-btn:hover::before {
+        .fluent-card:hover::before, .res-preset-btn:hover::before, .ic-menu-action:hover::before {
             opacity: 1;
             background-color: rgba(0,0,0,0.015); /* Reduced darken by 0.33x */
         }
@@ -285,49 +287,57 @@ const IC_ICONS = {
             }
         }
     </style>
-    <div id="ic-nodes-overlay" style="position:absolute; top:0; left:0; bottom:0; z-index:1500; display:flex; align-items:center; pointer-events:none; font-family:sans-serif;">
-        <div id="ic-nodes-wrapper" style="display:flex; flex-direction:row; align-items:center; height:85%; max-height:800px; transform:translateX(-750px); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);">
-            <div id="ic-nodes-panel" class="fluent-panel" style="pointer-events:auto; cursor:default; display:flex; flex-direction:row; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.4); border-left:none; border-top-right-radius:24px; border-bottom-right-radius:24px; box-shadow: 0 4px 12px rgba(0,0,0,0), inset 1px 1px 0 rgba(255,255,255,0.2); width:750px; height:100%; overflow:hidden; z-index:1; position:relative; transition:box-shadow 0.3s ease;">
-                <!-- Nodes List Column -->
-                <div style="width:260px; padding:20px; display:flex; flex-direction:column;">
-                    <div style="font-weight:bold; color:var(--body-text-color, white); margin-top:12px; margin-bottom:25px; font-size:14px; text-transform:uppercase; letter-spacing:1px; opacity:0.8; padding-left:2px;">${t('Pipeline')}</div>
-                    <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
+    <div id="ic-nodes-overlay" onclick="if(event.target === this) window.ic_action_toggle_node_manager()" style="position:absolute; top:0; left:0; right:0; bottom:0; z-index:1500; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); font-family:sans-serif; opacity:0; pointer-events:none; transition:opacity 0.2s;">
+        <div id="ic-nodes-wrapper" style="display:flex; flex-direction:row; align-items:center; justify-content:center; height:85%; max-height:800px; transform:scale(0.95); transition:transform 0.2s cubic-bezier(0.4,0,0.2,1); pointer-events:none;">
+            <div id="ic-nodes-panel" class="fluent-panel" style="pointer-events:none; cursor:default; display:flex; flex-direction:column; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.4); border-radius:24px; box-shadow: 0 8px 32px rgba(0,0,0,0.2), inset 1px 1px 0 rgba(255,255,255,0.2); width:750px; height:100%; overflow:hidden; z-index:1; position:relative;">
+                
+                <!-- Header -->
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.1);">
+                    <h3 id="ic-sidebar-title" style="margin: 0; font-size: 15px; font-weight: 700; color: var(--body-text-color, #fff);">${typeof t === 'function' ? t('Node Manager') : 'Node Manager'}</h3>
+                    <button id="ic-nodes-close-btn" type="button" title="Close" style="flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-color-primary, rgba(128,128,128,0.2)) !important; border-radius: 8px !important; background: var(--background-fill-secondary, rgba(128,128,128,0.15)) !important; color: var(--body-text-color, #fff) !important; cursor: pointer !important; box-sizing: border-box !important; margin: 0 !important; margin-bottom: 0 !important; box-shadow: none !important; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.1s;" onmousedown="this.style.transform='scale(0.85)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='var(--background-fill-secondary, rgba(128,128,128,0.15))'" onclick="window.ic_action_toggle_node_manager()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
                 </div>
-                <!-- Settings Column -->
-                <div style="flex:1; padding:20px; display:flex; flex-direction:column; position:relative;">
-                    <div id="ic-nodes-search-wrap" class="fluent-card" style="position:absolute; top:20px; left:20px; right:28px; height:42px; box-sizing:border-box; z-index:10; border-radius:24px; background:rgba(255,255,255,0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--border-color-primary, rgba(128,128,128,0.2)); transition: border-color 0.2s, background 0.2s;">
-                        <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.4; color:var(--body-text-color, white); pointer-events:none; font-size: 18px; display: inline-flex;">${IC_ICONS.search}</span>
-                        <input type="text" id="ic-nodes-search" placeholder="${t('Search settings...')}" style="width:100%; height:100%; box-sizing:border-box; padding:0 16px 0 40px; margin:0; background:transparent; border:none !important; box-shadow:none !important; color:var(--body-text-color, white); font-size:13px; outline:none; line-height:40px;" onfocus="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--color-accent, cornflowerblue)';" onblur="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" />
+
+                <!-- Body -->
+                <div style="display:flex; flex-direction:row; flex:1; overflow:hidden;">
+                    <!-- Nodes List Column -->
+                    <div style="width:260px; padding:20px; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,0.1);">
+                        <div id="ic-nodes-list-col" style="flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:8px;"></div>
                     </div>
-                    <div id="ic-nodes-settings-col" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                </div>
-            </div>
-            <!-- Toggle Button -->
-            <div style="pointer-events:auto; display:flex; align-items:center; margin-left: -1px; z-index:2;">
-                <div id="ic-nodes-toggle" style="width:24px; height:60px; background:color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:var(--body-text-color, white); border: 1px solid var(--border-color-primary, rgba(255,255,255,0.1)); border-left: none; display:flex; align-items:center; justify-content:center; cursor:pointer; border-top-right-radius:8px; border-bottom-right-radius:8px; user-select:none; transition:background 0.2s;">
-                    <svg id="ic-nodes-toggle-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); transform: rotate(180deg);"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    
+                    <!-- Settings Column -->
+                    <div style="flex:1; padding:20px; display:flex; flex-direction:column; position:relative;">
+                        <div id="ic-nodes-search-wrap" class="fluent-card" style="position:absolute; top:20px; left:20px; right:20px; height:42px; box-sizing:border-box; z-index:10; border-radius:24px; background:rgba(255,255,255,0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid var(--border-color-primary, rgba(128,128,128,0.2)); transition: border-color 0.2s, background 0.2s;">
+                            <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); opacity:0.4; color:var(--body-text-color, white); pointer-events:none; font-size: 18px; display: inline-flex;">${IC_ICONS.search}</span>
+                            <input type="text" id="ic-nodes-search" placeholder="${typeof t === 'function' ? t('Search settings...') : 'Search settings...'}" style="width:100%; height:100%; box-sizing:border-box; padding:0 16px 0 40px; margin:0; background:transparent; border:none !important; box-shadow:none !important; color:var(--body-text-color, white); font-size:13px; outline:none; line-height:40px;" onfocus="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--color-accent, cornflowerblue)';" onblur="document.getElementById('ic-nodes-search-wrap').style.borderColor='var(--border-color-primary, rgba(128,128,128,0.2))';" />
+                        </div>
+                        <div id="ic-nodes-settings-col" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>`;
     container.insertAdjacentHTML('beforeend', nodesOverlayHTML);
 
-    document.getElementById('ic-nodes-toggle').addEventListener('click', function() {
+    window.ic_action_toggle_node_manager = function() {
+        const overlay = document.getElementById('ic-nodes-overlay');
         const wrapper = document.getElementById('ic-nodes-wrapper');
         const panel = document.getElementById('ic-nodes-panel');
-        const icon = document.getElementById('ic-nodes-toggle-icon');
-        if (wrapper.style.transform === 'translateX(-750px)') {
-            wrapper.style.transform = 'translateX(0)';
-            panel.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15), inset 1px 1px 0 rgba(255,255,255,0.2)';
-            if (icon) icon.style.transform = 'rotate(0deg)';
-
+        if (!overlay || !wrapper) return;
+        
+        if (overlay.style.opacity === '1') {
+            overlay.style.opacity = '0';
+            overlay.style.pointerEvents = 'none';
+            if (panel) panel.style.pointerEvents = 'none';
+            wrapper.style.transform = 'scale(0.95)';
         } else {
-            wrapper.style.transform = 'translateX(-750px)';
-            panel.style.boxShadow = '0 4px 12px rgba(0,0,0,0), inset 1px 1px 0 rgba(255,255,255,0.2)';
-            if (icon) icon.style.transform = 'rotate(180deg)';
-
+            overlay.style.opacity = '1';
+            overlay.style.pointerEvents = 'auto';
+            if (panel) panel.style.pointerEvents = 'auto';
+            wrapper.style.transform = 'scale(1)';
         }
-    });
+    };
 
     document.getElementById('ic-nodes-search').addEventListener('input', function(e) {
         const query = e.target.value.toLowerCase();
@@ -343,17 +353,50 @@ const IC_ICONS = {
         });
     });
 
-    // Fluent Design & Ripple Effects (Global)
+    // Fluent Design & Ripple Effects (Global) - OPTIMIZED
+    let lastHoveredCards = new Set();
+    let isFluentRafPending = false;
+    let latestFluentEvent = { clientX: 0, clientY: 0, path: [] };
+    
     document.addEventListener('mousemove', function(e) {
-        const cards = document.querySelectorAll('.fluent-card, .fluent-panel, .res-preset-btn');
-        cards.forEach(card => {
-            const rect = card.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            card.style.setProperty('--mouse-x', `${x}px`);
-            card.style.setProperty('--mouse-y', `${y}px`);
-        });
-    });
+        latestFluentEvent.clientX = e.clientX;
+        latestFluentEvent.clientY = e.clientY;
+        latestFluentEvent.path = e.composedPath();
+        
+        if (!isFluentRafPending) {
+            isFluentRafPending = true;
+            requestAnimationFrame(() => {
+                isFluentRafPending = false;
+                
+                const currentlyHovered = new Set();
+                const path = latestFluentEvent.path;
+                
+                for (let i = 0; i < path.length; i++) {
+                    const el = path[i];
+                    if (el && el.classList && (el.classList.contains('fluent-card') || el.classList.contains('fluent-panel') || el.classList.contains('res-preset-btn') || el.classList.contains('ic-menu-action') || el.classList.contains('ic-pipeline-node'))) {
+                        currentlyHovered.add(el);
+                    }
+                }
+                
+                lastHoveredCards.forEach(card => {
+                    if (!currentlyHovered.has(card)) {
+                        card.style.setProperty('--mouse-x', '-9999px');
+                        card.style.setProperty('--mouse-y', '-9999px');
+                    }
+                });
+                
+                currentlyHovered.forEach(card => {
+                    const rect = card.getBoundingClientRect();
+                    const x = latestFluentEvent.clientX - rect.left;
+                    const y = latestFluentEvent.clientY - rect.top;
+                    card.style.setProperty('--mouse-x', `${x}px`);
+                    card.style.setProperty('--mouse-y', `${y}px`);
+                });
+                
+                lastHoveredCards = currentlyHovered;
+            });
+        }
+    }, { passive: true });
 
     document.addEventListener('mousedown', function(e) {
         // Prevent click effects on the container when interacting with form inputs
@@ -421,6 +464,270 @@ const IC_ICONS = {
     </div>`;
     container.insertAdjacentHTML('beforeend', dynamicModalHTML);
 
+    window.ic_alert = function(message, title="Alert") {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('ic_dynamic_modal');
+            const modalTitle = document.getElementById('ic_dynamic_modal_title');
+            const modalContent = document.getElementById('ic_dynamic_modal_content');
+            if(modalTitle) modalTitle.innerText = typeof t === 'function' ? t(title) : title;
+            if(modalContent) modalContent.innerHTML = `
+                <div style="color: var(--body-text-color, #fff); font-size: 15px; margin-bottom: 24px; line-height: 1.5; white-space: pre-wrap;">${message}</div>
+                <div style="display: flex; justify-content: flex-end;">
+                    <button id="ic_alert_ok" class="res-preset-btn primary" style="padding: 8px 24px; font-weight: bold; border: none; background: #2563eb !important; color: #fff !important;">${typeof t === 'function' ? t('OK') : 'OK'}</button>
+                </div>
+            `;
+            if(modal) modal.style.display = 'flex';
+            const okBtn = document.getElementById('ic_alert_ok');
+            if(okBtn) okBtn.onclick = () => {
+                if(modal) modal.style.display = 'none';
+                resolve();
+            };
+        });
+    };
+
+    window.ic_confirm = function(message, title="Confirm") {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('ic_dynamic_modal');
+            const modalTitle = document.getElementById('ic_dynamic_modal_title');
+            const modalContent = document.getElementById('ic_dynamic_modal_content');
+            if(modalTitle) modalTitle.innerText = typeof t === 'function' ? t(title) : title;
+            if(modalContent) modalContent.innerHTML = `
+                <div style="color: var(--body-text-color, #fff); font-size: 15px; margin-bottom: 24px; line-height: 1.5; white-space: pre-wrap;">${message}</div>
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button id="ic_confirm_cancel" class="res-preset-btn" style="padding: 8px 24px; font-weight: bold; border: 1px solid rgba(128,128,128,0.3); background: transparent !important; color: var(--body-text-color, #fff) !important;">${typeof t === 'function' ? t('Cancel') : 'Cancel'}</button>
+                    <button id="ic_confirm_ok" class="res-preset-btn primary" style="padding: 8px 24px; font-weight: bold; border: none; background: #2563eb !important; color: #fff !important;">${typeof t === 'function' ? t('OK') : 'OK'}</button>
+                </div>
+            `;
+            if(modal) modal.style.display = 'flex';
+            const cancelBtn = document.getElementById('ic_confirm_cancel');
+            if(cancelBtn) cancelBtn.onclick = () => {
+                if(modal) modal.style.display = 'none';
+                resolve(false);
+            };
+            const okBtn = document.getElementById('ic_confirm_ok');
+            if(okBtn) okBtn.onclick = () => {
+                if(modal) modal.style.display = 'none';
+                resolve(true);
+            };
+        });
+    };
+
+    // --- MENU BAR INJECTION ---
+    const menuBarHTML = `
+    <div id="ic-menu-bar" class="fluent-panel" style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 36px;
+        z-index: 2500;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        font-size: 13px;
+        gap: 4px;
+        user-select: none;
+    " onwheel="event.stopPropagation()">
+        <div style="
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+            z-index: -1;
+            pointer-events: none;
+        "></div>
+        <div class="ic-menu-item-group">
+            <div class="ic-menu-item-label">${typeof t === 'function' ? t('File') : 'File'}</div>
+            <div class="ic-menu-dropdown">
+                <div class="ic-menu-action" onclick="window.ic_action_new_project()">${typeof t === 'function' ? t('New Project') : 'New Project'}</div>
+                <div class="ic-menu-action ic-has-submenu" onmouseenter="window.ic_populate_menu_projects()">
+                    ${typeof t === 'function' ? t('Load Project') : 'Load Project'}
+                    <span style="margin-left:auto; opacity:0.5; font-size:18px; display:inline-flex; align-items:center;">${IC_ICONS.chevron_right}</span>
+                    <div class="ic-submenu">
+                        <div class="ic-submenu-content" id="ic-menu-projects-list">
+                            <div style="padding: 8px 12px; color: #888;">${typeof t === 'function' ? t('Loading...') : 'Loading...'}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ic-menu-action" onclick="document.getElementById('ic-projects-save-btn')?.click()">${typeof t === 'function' ? t('Save Project') : 'Save Project'}</div>
+                <div class="ic-menu-action" id="ic-menu-autosave-item" onclick="if(window.ic_action_toggle_autosave) window.ic_action_toggle_autosave()" style="display: flex; align-items: center;">
+                    <span id="ic-menu-autosave-check" style="margin-right: 6px; display: none; font-size: 16px;"></span>
+                    ${typeof t === 'function' ? t('Autosave') : 'Autosave'}
+                </div>
+                <div class="ic-menu-divider"></div>
+                <div class="ic-menu-action ic-has-submenu">
+                    ${typeof t === 'function' ? t('Upload Base Image') : 'Upload Base Image'}
+                    <span style="margin-left:auto; opacity:0.5; font-size:18px; display:inline-flex; align-items:center;">${IC_ICONS.chevron_right}</span>
+                    <div class="ic-submenu">
+                        <div class="ic-submenu-content">
+                            <div class="ic-menu-action" onclick="window.ic_action_paste()">${typeof t === 'function' ? t('From Clipboard') : 'From Clipboard'}</div>
+                            <div class="ic-menu-action" onclick="window.ic_action_upload()">${typeof t === 'function' ? t('From Local') : 'From Local'}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ic-menu-action" onclick="window.ic_action_download()">${typeof t === 'function' ? t('Download Canvas') : 'Download Canvas'}</div>
+            </div>
+        </div>
+        <div class="ic-menu-item-group">
+            <div class="ic-menu-item-label">${typeof t === 'function' ? t('Edit') : 'Edit'}</div>
+            <div class="ic-menu-dropdown">
+                <div class="ic-menu-action" id="ic_menu_undo" onclick="window.ic_action_undo()"><span style="margin-right:8px;">${IC_ICONS.undo}</span>${typeof t === 'function' ? t('Undo Canvas') : 'Undo Canvas'}</div>
+                <div class="ic-menu-action" id="ic_menu_redo" onclick="window.ic_action_redo()"><span style="margin-right:8px;">${IC_ICONS.redo}</span>${typeof t === 'function' ? t('Redo Canvas') : 'Redo Canvas'}</div>
+                <div class="ic-menu-divider"></div>
+                <div class="ic-menu-action" id="ic_menu_mask_undo"><span style="margin-right:8px;">${IC_ICONS.undo}</span>${typeof t === 'function' ? t('Undo Mask') : 'Undo Mask'}<span class="ic-menu-shortcut">Ctrl+Z</span></div>
+                <div class="ic-menu-action" id="ic_menu_mask_redo"><span style="margin-right:8px;">${IC_ICONS.redo}</span>${typeof t === 'function' ? t('Redo Mask') : 'Redo Mask'}<span class="ic-menu-shortcut">Ctrl+Y</span></div>
+                <div class="ic-menu-divider"></div>
+                <div class="ic-menu-action" onclick="window.ic_action_copy()">${typeof t === 'function' ? t('Copy Canvas') : 'Copy Canvas'}</div>
+                <div class="ic-menu-action" onclick="window.ic_action_reset()">${typeof t === 'function' ? t('Reset Canvas') : 'Reset Canvas'}</div>
+                <div class="ic-menu-action" onclick="window.ic_action_clear_mask()">${typeof t === 'function' ? t('Clear Mask') : 'Clear Mask'}</div>
+                <div class="ic-menu-divider"></div>
+                <div class="ic-menu-action" onclick="if(window.ic_autoCrop) window.ic_autoCrop('black')">${typeof t === 'function' ? t('Crop Pure Black') : 'Crop Pure Black'}</div>
+                <div class="ic-menu-action" onclick="if(window.ic_autoCrop) window.ic_autoCrop('white')">${typeof t === 'function' ? t('Crop Pure White') : 'Crop Pure White'}</div>
+            </div>
+        </div>
+        <div class="ic-menu-item-group">
+            <div class="ic-menu-item-label">${typeof t === 'function' ? t('View') : 'View'}</div>
+            <div class="ic-menu-dropdown">
+                <div class="ic-menu-action" id="ic-menu-overlay-item" onclick="window.ic_action_toggle_overlay()" style="display: flex; align-items: center;">
+                    <span id="ic-menu-overlay-check" style="margin-right: 6px; display: inline-flex; font-size: 16px;">${IC_ICONS.check}</span>
+                    ${typeof t === 'function' ? t('Show Overlays') : 'Show Overlays'}
+                </div>
+                <div class="ic-menu-divider"></div>
+                <div class="ic-menu-action" onclick="window.ic_action_toggle_fullscreen()">${typeof t === 'function' ? t('Fullscreen') : 'Fullscreen'}</div>
+                <div class="ic-menu-action" onclick="window.ic_action_open_standalone()">${typeof t === 'function' ? t('Open in New Window') : 'Open in New Window'}</div>
+            </div>
+        </div>
+        <div class="ic-menu-item-group">
+            <div class="ic-menu-item-label">${typeof t === 'function' ? t('Window') : 'Window'}</div>
+            <div class="ic-menu-dropdown">
+                <div class="ic-menu-action" onclick="window.ic_action_toggle_node_manager()" style="display:flex; align-items:center;">
+                    ${typeof t === 'function' ? t('Open Node Manager') : 'Open Node Manager'}
+                    <span class="ic-menu-shortcut">Ctrl+P</span>
+                </div>
+            </div>
+        </div>
+        <div class="ic-menu-item-group">
+            <div class="ic-menu-item-label">${typeof t === 'function' ? t('About') : 'About'}</div>
+            <div class="ic-menu-dropdown">
+                <div class="ic-menu-action" style="cursor: default; pointer-events: none; opacity: 0.7;">Infinite Canvas</div>
+            </div>
+        </div>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+            <div id="ic-menu-project-name-display" style="cursor: text; padding: 4px 8px; border-radius: 6px; transition: background 0.2s; color: var(--body-text-color, #fff); font-weight: 600;" title="Double click to edit project name" ondblclick="window.ic_action_edit_project_name()">project</div>
+            <input id="ic-menu-project-name-input" type="text" style="display: none; height: 26px; padding: 0 8px; border-radius: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: white; outline: none; font-size: 13px; width: 140px; font-weight: 600;" onblur="window.ic_action_save_project_name()" onkeydown="if(event.key === 'Enter') this.blur();">
+        </div>
+    </div>
+    <style>
+        .ic-menu-item-group {
+            position: relative;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            z-index: auto !important;
+        }
+        .ic-menu-item-label {
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.2s;
+            color: var(--body-text-color, #fff);
+            display: flex;
+            align-items: center;
+            line-height: 1;
+        }
+        .ic-menu-item-group:hover .ic-menu-item-label,
+        .ic-menu-item-group.ic-menu-open .ic-menu-item-label {
+            background: color-mix(in srgb, currentColor 10%, transparent);
+        }
+        .ic-menu-dropdown::before,
+        .ic-submenu::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+            z-index: -1;
+            pointer-events: none;
+        }
+        .ic-menu-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            min-width: 200px;
+            border-radius: 16px;
+            padding: 4px;
+            display: none;
+            flex-direction: column;
+            z-index: 3000;
+        }
+        /* Open/close is JS-controlled (12_menu.js via Floating UI).
+           This CSS-hover rule only applies as a fallback when the lib fails to load. */
+        .ic-menu-css-fallback .ic-menu-item-group:hover .ic-menu-dropdown {
+            display: flex;
+        }
+        .ic-menu-action {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            color: var(--body-text-color, #fff);
+            transition: all 0.15s;
+            position: relative;
+        }
+        .ic-menu-action:hover {
+            background: cornflowerblue !important;
+            color: white !important;
+            --ic-border-color: color-mix(in srgb, cornflowerblue 70%, black);
+            --ic-glow-color: rgba(255, 255, 255, 0.8);
+        }
+        .ic-menu-action:hover svg,
+        .ic-menu-action:hover svg path,
+        .ic-menu-action:hover span {
+            fill: white !important;
+            color: white !important;
+        }
+        .ic-menu-shortcut {
+            margin-left: auto;
+            opacity: 0.5;
+            font-size: 12px;
+        }
+        .ic-menu-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 4px 0;
+        }
+        .ic-has-submenu { position: relative; }
+        .ic-submenu {
+            position: absolute;
+            left: 100%;
+            top: 0;
+            min-width: 180px;
+            border-radius: 16px;
+            padding: 4px;
+            display: none;
+            flex-direction: column;
+            margin-left: -4px;
+            z-index: 5002;
+        }
+        .ic-submenu-content {
+            display: flex;
+            flex-direction: column;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .ic-menu-css-fallback .ic-has-submenu:hover .ic-submenu { display: flex; }
+    </style>
+    `;
+    container.insertAdjacentHTML('beforeend', menuBarHTML);
+
     // --- FLOATING TOOLBAR INJECTION ---
     const floatingToolbarHTML = `
     <div id="ic-floating-toolbar" class="fluent-panel" style="
@@ -445,18 +752,16 @@ const IC_ICONS = {
         width: max-content;
         max-width: 95%;
     ">
-        <!-- Top Row: Tools & Undo/Redo & Toggles -->
         <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;">
-            <button id="ic_float_undo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;"><span style="font-size: 16px; vertical-align: middle; margin-right: 4px; display: inline-flex;">${IC_ICONS.undo}</span>${t('Canvas')}</button>
-            <button id="ic_float_redo" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Canvas')}<span style="font-size: 16px; vertical-align: middle; margin-left: 4px; display: inline-flex;">${IC_ICONS.redo}</span></button>
+            <!-- Fast Res Button -->
+            <button id="ic_float_res_btn" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 14px; font-weight: bold;" title="${typeof t === 'function' ? t('Resolution Preset') : 'Resolution Preset'}">
+                <span style="font-size: 18px; margin-right: 6px; display: inline-flex; vertical-align: middle;">${IC_ICONS.photo_size_select_large || IC_ICONS.rectangle || '📏'}</span>
+                ${typeof t === 'function' ? t('Resolution') : 'Resolution'}
+            </button>
 
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
 
-            <button id="ic_float_mask_undo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;"><span style="font-size: 16px; vertical-align: middle; margin-right: 4px; display: inline-flex;">${IC_ICONS.undo}</span>${t('Mask')}</button>
-            <button id="ic_float_mask_redo" class="res-preset-btn disabled-state" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Mask')}<span style="font-size: 16px; vertical-align: middle; margin-left: 4px; display: inline-flex;">${IC_ICONS.redo}</span></button>
-            
-            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
-            
+            <!-- Tools -->
             <button id="ic_float_rect" class="res-preset-btn primary float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Rect')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.rectangle}</span></button>
             <button id="ic_float_brush" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Brush')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.brush}</span></button>
             <button id="ic_float_ellipse" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('Ellipse')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.circle}</span></button>
@@ -464,10 +769,15 @@ const IC_ICONS = {
             <button id="ic_float_magic" class="res-preset-btn float-tool-btn" style="padding: 0 12px; width: auto; font-size: 16px;" title="${t('🪄 Magic Wand')} \n${t('Click inside the blue box to auto-segment')}"><span style="font-size: 20px; vertical-align: middle; display: inline-flex;">${IC_ICONS.auto_fix_high}</span></button>
             
             <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
-            
-            <button id="ic_float_autosave" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Save')}</button>
-            <button id="ic_float_overlay" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Show Overlays')}</button>
+
+            <!-- Auto Scale -->
             <button id="ic_float_autoscale" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Scale Canvas')}</button>
+            
+            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
+
+            <button id="ic-sidebar-generate-btn" class="res-preset-btn primary" style="height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 12px rgba(100, 149, 237, 0.4);">${t('Generate')}</button>
+            <button id="ic-sidebar-interrupt-btn" class="res-preset-btn" style="display: none; height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; background: #e53e3e !important; color: white !important; box-shadow: 0 4px 12px rgba(229, 62, 62, 0.4) !important;">${t('Interrupt')}</button>
+            <input type="file" id="ic_float_upload_input" accept=".png,.jpg,.jpeg,.webp" style="display: none;" />
         </div>
         
         <!-- Floating Popup for Brush Size -->
@@ -476,39 +786,30 @@ const IC_ICONS = {
             <input type="range" id="ic_float_brush_size" min="0" max="100" value="10" style="width: 120px; cursor: pointer; margin: 0;">
             <div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid rgba(255, 255, 255, 0.95);"></div>
         </div>
-        
-        <!-- Bottom Row: Presets & Actions -->
-        <div style="display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: nowrap; overflow-x: auto;">
-            <div class="res-preset-container" style="min-width: unset; height: auto;">
-                <div class="res-preset-btn" onclick="ic_setRes(1024,1024)" title="1024 x 1024"><div class="res-preset-icon" style="width: 24px; height: 24px;">1K</div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(832,1216)" title="832 x 1216"><div class="res-preset-icon" style="width: 16px; height: 24px;"><span style="transform: scale(0.85);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(1216,832)" title="1216 x 832"><div class="res-preset-icon" style="width: 24px; height: 16px;">1K</div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(1024,1280)" title="1024 x 1280"><div class="res-preset-icon" style="width: 19px; height: 24px;"><span style="transform: scale(0.85);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(1280,1024)" title="1280 x 1024"><div class="res-preset-icon" style="width: 24px; height: 19px;"><span style="transform: scale(0.85);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(768,1344)" title="768 x 1344"><div class="res-preset-icon" style="width: 14px; height: 24px;"><span style="transform: scale(0.75);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(1344,768)" title="1344 x 768"><div class="res-preset-icon" style="width: 24px; height: 14px;"><span style="transform: scale(0.75);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(704,1472)" title="704 x 1472"><div class="res-preset-icon" style="width: 11px; height: 24px;"><span style="transform: scale(0.65);">1K</span></div></div>
-                <div class="res-preset-btn" onclick="ic_setRes(1472,704)" title="1472 x 704"><div class="res-preset-icon" style="width: 24px; height: 11px;"><span style="transform: scale(0.65);">1K</span></div></div>
-            </div>
-            
-            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
-            
-            <button id="ic_float_clear" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Clear Mask')}</button>
-            <button id="ic_float_autocrop" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Auto Crop')}</button>
-            <button id="ic_float_reset" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Reset Canvas')}</button>
-            <button id="ic_float_download" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Download Canvas')}</button>
-            <button id="ic_float_copy" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Copy Canvas')}</button>
-            <button id="ic_float_upload" class="res-preset-btn" style="padding: 0 12px; width: auto; font-size: 13px;">${t('Upload Base Image')}</button>
-            <input type="file" id="ic_float_upload_input" accept=".png,.jpg,.jpeg,.webp" style="display: none;" />
-            <button id="ic_float_projects" class="res-preset-btn primary" style="padding: 0 12px; width: auto; font-size: 13px;" title="${t('Projects')}"><span style="font-size: 18px; vertical-align: middle; margin-right: 6px; display: inline-flex;">${IC_ICONS.projects}</span>${t('Projects')}</button>
-
-            <div style="min-width: 1px; height: 24px; background: rgba(0,0,0,0.1); margin: 0 4px;"></div>
-
-            <button id="ic-sidebar-generate-btn" class="res-preset-btn primary" style="height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 12px rgba(100, 149, 237, 0.4);">${t('Generate')}</button>
-            <button id="ic-sidebar-interrupt-btn" class="res-preset-btn" style="display: none; height: 40px; min-width: 120px; padding: 0 24px; font-size: 15px; font-weight: 700; background: #e53e3e !important; color: white !important; box-shadow: 0 4px 12px rgba(229, 62, 62, 0.4) !important;">${t('Interrupt')}</button>
-        </div>
     </div>
+
     
+    <!-- Floating Popup for Resolution Presets -->
+    <div id="ic_res_popup" style="opacity: 0; pointer-events: none; position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%) translateY(10px) scale(0.95); transition: opacity 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 8px; z-index: 1001; min-width: 180px;">
+        <div style="font-size: 13px; font-weight: bold; color: #555; text-align: center; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 4px;">${typeof t === 'function' ? t('Resolution Preset') : 'Resolution Preset'}</div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(1024,1024); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 16px; height: 16px;"></div></div> 1024 × 1024 <span style="opacity:0.5; margin-left:auto; font-size:11px;">1:1</span></div>
+            
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(832,1216); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 11px; height: 16px;"></div></div> 832 × 1216 <span style="opacity:0.5; margin-left:auto; font-size:11px;">2:3</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(768,1344); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 9px; height: 16px;"></div></div> 768 × 1344 <span style="opacity:0.5; margin-left:auto; font-size:11px;">9:16</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(640,1632); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 6px; height: 16px;"></div></div> 640 × 1632 <span style="opacity:0.5; margin-left:auto; font-size:11px;">2:5</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(512,2048); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 4px; height: 16px;"></div></div> 512 × 2048 <span style="opacity:0.5; margin-left:auto; font-size:11px;">1:4</span></div>
+            
+            <div style="height:1px; background:rgba(0,0,0,0.05); margin: 2px 0;"></div>
+            
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(1216,832); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 16px; height: 11px;"></div></div> 1216 × 832 <span style="opacity:0.5; margin-left:auto; font-size:11px;">3:2</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(1344,768); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 16px; height: 9px;"></div></div> 1344 × 768 <span style="opacity:0.5; margin-left:auto; font-size:11px;">16:9</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(1632,640); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 16px; height: 6px;"></div></div> 1632 × 640 <span style="opacity:0.5; margin-left:auto; font-size:11px;">5:2</span></div>
+            <div class="res-preset-btn" style="width: 100%; height: 32px; padding: 0 12px; font-size: 13px; justify-content: flex-start;" onclick="ic_setRes(2048,512); document.getElementById('ic_res_popup').style.opacity='0'; document.getElementById('ic_res_popup').style.pointerEvents='none';"><div style="width:24px;display:flex;justify-content:center;margin-right:8px;"><div class="res-preset-icon" style="width: 16px; height: 4px;"></div></div> 2048 × 512 <span style="opacity:0.5; margin-left:auto; font-size:11px;">4:1</span></div>
+        </div>
+        <div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid rgba(255, 255, 255, 0.95);"></div>
+    </div>
+
     <!-- Floating Popup for Auto Crop -->
     <div id="ic_crop_popup" style="opacity: 0; pointer-events: none; position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%) translateY(10px) scale(0.95); transition: opacity 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); padding: 8px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 5px; z-index: 1001;">
         <button id="ic_crop_black" class="res-preset-btn" style="padding: 6px 12px; font-size: 13px; background: #000 !important; color: #fff !important; width: 100%; justify-content: center;">${typeof t === 'function' ? t('Crop Pure Black') : 'Crop Pure Black'}</button>
@@ -527,6 +828,8 @@ const IC_ICONS = {
         align-items: center;
         justify-content: center;
         height: 36px;
+        min-width: 36px;
+        padding: 0 8px;
         font-family: sans-serif;
         font-weight: 500;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
@@ -564,7 +867,7 @@ const IC_ICONS = {
         box-sizing: border-box;
         overflow: hidden;
     }
-        .res-preset-btn.disabled-state {
+        .res-preset-btn.disabled-state, .ic-menu-action.disabled-state {
         opacity: 0.5 !important;
         cursor: not-allowed !important;
         pointer-events: none !important;
@@ -677,7 +980,7 @@ const IC_ICONS = {
         });
         
         // Undo / Redo
-        document.getElementById('ic_float_undo')?.addEventListener('click', async () => {
+        window.ic_action_undo = async function() {
             if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Undoing...") : "Undoing...", 0, 'white', 'ic-save-toast');
             try {
                 const res = await fetch('/infinite-canvas-api/canvas/toggle', {
@@ -692,9 +995,10 @@ const IC_ICONS = {
             } finally {
                 if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
             }
-        });
+        };
+        document.getElementById('ic_float_undo')?.addEventListener('click', window.ic_action_undo);
 
-        document.getElementById('ic_float_redo')?.addEventListener('click', async () => {
+        window.ic_action_redo = async function() {
             if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Redoing...") : "Redoing...", 0, 'white', 'ic-save-toast');
             try {
                 const res = await fetch('/infinite-canvas-api/canvas/toggle', {
@@ -709,11 +1013,14 @@ const IC_ICONS = {
             } finally {
                 if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
             }
-        });
+        };
+        document.getElementById('ic_float_redo')?.addEventListener('click', window.ic_action_redo);
 
         // Mask Undo / Redo
         document.getElementById('ic_float_mask_undo')?.addEventListener('click', undoMask);
         document.getElementById('ic_float_mask_redo')?.addEventListener('click', redoMask);
+        document.getElementById('ic_menu_mask_undo')?.addEventListener('click', undoMask);
+        document.getElementById('ic_menu_mask_redo')?.addEventListener('click', redoMask);
 
         // Keyboard shortcuts for mask undo/redo: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
         // Also track backtick (`) for debug info
@@ -728,7 +1035,10 @@ const IC_ICONS = {
                     if (typeof draw === 'function') draw();
                 }
             }
-            if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+            if (e.key === 'p' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                if (window.ic_action_toggle_node_manager) window.ic_action_toggle_node_manager();
+            } else if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
                 e.preventDefault();
                 undoMask();
             } else if ((e.ctrlKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) || (e.ctrlKey && e.key === 'y')) {
@@ -744,75 +1054,254 @@ const IC_ICONS = {
             }
         });
         
-        // Sync disabled state
-        function syncDisabledState(sourceId, targetId) {
-            const src = document.getElementById(sourceId);
-            const tgt = document.getElementById(targetId);
-            if (src && tgt) {
-                const updateState = () => {
-                    tgt.disabled = src.disabled || src.classList.contains('disabled');
-                    if (tgt.disabled) tgt.classList.add('disabled-state');
-                    else tgt.classList.remove('disabled-state');
-                };
-                updateState();
-                const observer = new MutationObserver(updateState);
-                observer.observe(src, { attributes: true, attributeFilter: ['disabled', 'class'] });
-            }
-        }
-        syncDisabledState('ic_prev_btn', 'ic_float_undo');
-        syncDisabledState('ic_now_btn', 'ic_float_redo');
+        window.ic_update_canvas_undo_redo = function(canUndo, canRedo) {
+            const setDisabled = (ids, isDisabled) => {
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.disabled = isDisabled;
+                    if (isDisabled) el.classList.add('disabled-state');
+                    else el.classList.remove('disabled-state');
+                });
+            };
+            setDisabled(['ic_float_undo', 'ic_menu_undo'], !canUndo);
+            setDisabled(['ic_float_redo', 'ic_menu_redo'], !canRedo);
+        };
+        // Initial state is false
+        window.ic_update_canvas_undo_redo(false, false);
         
-        // Toggles
         const floatOverlayBtn = document.getElementById('ic_float_overlay');
-        if (floatOverlayBtn) {
-            floatOverlayBtn.addEventListener('click', () => {
-                window.ic_show_overlay_state = !window.ic_show_overlay_state;
-                
-                const overlayCb = document.querySelector('#ic_show_overlay input[type="checkbox"]');
-                if(overlayCb && overlayCb.checked !== window.ic_show_overlay_state) overlayCb.click();
-                
+        window.ic_action_toggle_overlay = function() {
+            window.ic_show_overlay_state = !window.ic_show_overlay_state;
+            
+            const overlayCb = document.querySelector('#ic_show_overlay input[type="checkbox"]');
+            if(overlayCb && overlayCb.checked !== window.ic_show_overlay_state) overlayCb.click();
+            
+            if (floatOverlayBtn) {
                 if (window.ic_show_overlay_state) floatOverlayBtn.classList.add('primary');
                 else floatOverlayBtn.classList.remove('primary');
-                
-                const sidebarOverlayBtn = document.getElementById('ic_show_overlay_btn');
-                if (sidebarOverlayBtn) {
-                    if (window.ic_show_overlay_state) {
-                        sidebarOverlayBtn.classList.add('primary');
-                        sidebarOverlayBtn.classList.remove('secondary');
-                    } else {
-                        sidebarOverlayBtn.classList.add('secondary');
-                        sidebarOverlayBtn.classList.remove('primary');
-                    }
+            }
+            
+            const menuCheck = document.getElementById('ic-menu-overlay-check');
+            if (menuCheck) {
+                if (window.ic_show_overlay_state) {
+                    menuCheck.innerHTML = IC_ICONS.check;
+                    menuCheck.style.display = 'inline-flex';
+                } else {
+                    menuCheck.innerHTML = '';
+                    menuCheck.style.display = 'none';
                 }
-                
-                if (typeof draw === 'function') draw();
-            });
+            }
+            
+            const sidebarOverlayBtn = document.getElementById('ic_show_overlay_btn');
+            if (sidebarOverlayBtn) {
+                if (window.ic_show_overlay_state) {
+                    sidebarOverlayBtn.classList.add('primary');
+                    sidebarOverlayBtn.classList.remove('secondary');
+                } else {
+                    sidebarOverlayBtn.classList.add('secondary');
+                    sidebarOverlayBtn.classList.remove('primary');
+                }
+            }
+            
+            if (typeof draw === 'function') draw();
+        };
+
+        if (floatOverlayBtn) {
+            floatOverlayBtn.addEventListener('click', window.ic_action_toggle_overlay);
         }
         const floatAutoScaleBtn = document.getElementById('ic_float_autoscale');
-        if (floatAutoScaleBtn) {
-            floatAutoScaleBtn.addEventListener('click', () => {
-                window.ic_auto_scale_state = !window.ic_auto_scale_state;
-                
-                const autoScaleCb = document.querySelector('input.ic-node-param[data-node-id="parse_input"][data-param-name="auto_scale"]');
-                if(autoScaleCb && autoScaleCb.checked !== window.ic_auto_scale_state) autoScaleCb.click();
-                
+        window.ic_action_toggle_autoscale = function() {
+            window.ic_auto_scale_state = !window.ic_auto_scale_state;
+            
+            const autoScaleCb = document.querySelector('input.ic-node-param[data-node-id="parse_input"][data-param-name="auto_scale"]');
+            if(autoScaleCb && autoScaleCb.checked !== window.ic_auto_scale_state) autoScaleCb.click();
+            
+            if (floatAutoScaleBtn) {
                 if (window.ic_auto_scale_state) floatAutoScaleBtn.classList.add('primary');
                 else floatAutoScaleBtn.classList.remove('primary');
-                
-                const sidebarAutoScaleBtn = document.getElementById('ic_auto_scale_btn');
-                if (sidebarAutoScaleBtn) {
-                    if (window.ic_auto_scale_state) {
-                        sidebarAutoScaleBtn.classList.add('primary');
-                        sidebarAutoScaleBtn.classList.remove('secondary');
-                    } else {
-                        sidebarAutoScaleBtn.classList.add('secondary');
-                        sidebarAutoScaleBtn.classList.remove('primary');
-                    }
+            }
+            
+            const sidebarAutoScaleBtn = document.getElementById('ic_auto_scale_btn');
+            if (sidebarAutoScaleBtn) {
+                if (window.ic_auto_scale_state) {
+                    sidebarAutoScaleBtn.classList.add('primary');
+                    sidebarAutoScaleBtn.classList.remove('secondary');
+                } else {
+                    sidebarAutoScaleBtn.classList.add('secondary');
+                    sidebarAutoScaleBtn.classList.remove('primary');
                 }
-            });
+            }
+        };
+
+        if (floatAutoScaleBtn) {
+            floatAutoScaleBtn.addEventListener('click', window.ic_action_toggle_autoscale);
         }
         
         // Actions
+        window.ic_get_project_name = function() {
+            const input = document.getElementById('ic-projects-name-input');
+            return input ? input.value.trim() : 'project';
+        };
+
+        window.ic_set_project_name = function(name) {
+            name = name.trim() || 'project';
+            const oldInput = document.getElementById('ic-projects-name-input');
+            if (oldInput && oldInput.value !== name) oldInput.value = name;
+            
+            const display = document.getElementById('ic-menu-project-name-display');
+            if (display) display.innerText = name;
+        };
+
+        window.ic_action_edit_project_name = function() {
+            const display = document.getElementById('ic-menu-project-name-display');
+            const input = document.getElementById('ic-menu-project-name-input');
+            if (!display || !input) return;
+            
+            display.style.display = 'none';
+            input.style.display = 'block';
+            input.value = window.ic_get_project_name();
+            input.focus();
+            input.select();
+        };
+
+        window.ic_action_save_project_name = function() {
+            const display = document.getElementById('ic-menu-project-name-display');
+            const input = document.getElementById('ic-menu-project-name-input');
+            if (!display || !input) return;
+            
+            const originalName = window.ic_get_project_name();
+            const newName = input.value.trim() || 'project';
+            
+            window.ic_set_project_name(newName);
+            input.style.display = 'none';
+            display.style.display = 'block';
+
+            if (originalName !== newName && window.ic_trigger_save_project) {
+                window.ic_trigger_save_project();
+            }
+        };
+
+        window.ic_action_new_project = async function() {
+            if (await window.ic_confirm(typeof t === 'function' ? t("Are you sure you want to start a new project? All unsaved changes will be lost.") : "Are you sure you want to start a new project? All unsaved changes will be lost.")) {
+                const defaultName = typeof t === 'function' ? t('project') : 'project';
+                const promptMsg = typeof t === 'function' ? t("Enter new project name:") : "Enter new project name:";
+                let newName = prompt(promptMsg, defaultName);
+                if (newName === null) return; // User cancelled
+                
+                window.ic_set_project_name(newName.trim() || defaultName);
+                fetch('/infinite-canvas-api/canvas/reset', { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (window.ic_handle_payload) window.ic_handle_payload(data);
+                    }).catch(e => console.error("New project failed", e));
+            }
+        };
+
+        window.ic_update_autosave_ui = function() {
+            const autosaveBtn = document.getElementById('ic_float_autosave');
+            if (autosaveBtn) {
+                if (window.ic_autosave_enabled) autosaveBtn.classList.add('primary');
+                else autosaveBtn.classList.remove('primary');
+            }
+            const menuCheck = document.getElementById('ic-menu-autosave-check');
+            if (menuCheck) {
+                if (window.ic_autosave_enabled) {
+                    menuCheck.innerHTML = IC_ICONS.check;
+                    menuCheck.style.display = 'inline-flex';
+                } else {
+                    menuCheck.innerHTML = '';
+                    menuCheck.style.display = 'none';
+                }
+            }
+        };
+
+        window.ic_action_toggle_autosave = async function() {
+            window.ic_autosave_enabled = !window.ic_autosave_enabled;
+            window.ic_update_autosave_ui();
+            try {
+                await fetch('/infinite-canvas-api/projects/set_autosave', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: window.ic_autosave_enabled })
+                });
+            } catch(e) { console.error("Set autosave failed", e); }
+        };
+
+        window.ic_populate_menu_projects = async function() {
+            const listContainer = document.getElementById('ic-menu-projects-list');
+            if (!listContainer || listContainer.getAttribute('data-loaded')) return;
+            
+            try {
+                const res = await fetch('/infinite-canvas-api/projects/list');
+                const projects = await res.json();
+                
+                listContainer.innerHTML = '';
+                delete listContainer.dataset.icHasScrollbar;
+                if (projects.length === 0) {
+                    listContainer.innerHTML = `<div style="padding: 8px 12px; color: color-mix(in srgb, var(--body-text-color, #fff) 60%, transparent); font-size: 13px;">${typeof t === 'function' ? t('No projects found.') : 'No projects found.'}</div>`;
+                    listContainer.setAttribute('data-loaded', 'true');
+                    return;
+                }
+                
+                projects.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'ic-menu-action';
+                    item.innerText = p.name;
+                    item.addEventListener('click', async (e) => {
+                        e.stopPropagation(); // prevent parent clicks
+                        if (window.ic_is_loading_or_saving) return;
+                        window.lockProjectUI();
+                        if (window.ic_set_project_name) window.ic_set_project_name(p.name);
+                        
+                        try {
+                            const chkRes = await fetch('/infinite-canvas-api/projects/check_autosave', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ project_name: p.name })
+                            });
+                            const chkData = await chkRes.json();
+                            
+                            const doLoad = async (recover) => {
+                                try {
+                                    const loadRes = await fetch('/infinite-canvas-api/projects/load', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ project_name: p.name, recover_autosave: recover })
+                                    });
+                                    const loadData = await loadRes.json();
+                                    if (window.ic_handle_payload) window.ic_handle_payload(loadData);
+                                } catch (err) {
+                                    console.error("Load project error", err);
+                                } finally {
+                                    if (window.unlockProjectUI) window.unlockProjectUI();
+                                }
+                            };
+                            
+                            if (chkData.has_newer) {
+                                const recoverModal = document.getElementById('ic-recover-modal');
+                                if (recoverModal) recoverModal.style.display = 'flex';
+                                window._ic_recover_callback = doLoad;
+                            } else {
+                                await doLoad(false);
+                            }
+                        } catch (err) {
+                            console.error("Check autosave error", err);
+                            if (window.unlockProjectUI) window.unlockProjectUI();
+                        }
+                    });
+                    listContainer.appendChild(item);
+                });
+                listContainer.setAttribute('data-loaded', 'true');
+                if (window.ic_init_custom_scrollbar) {
+                    window.ic_init_custom_scrollbar(listContainer);
+                }
+            } catch (err) {
+                console.error("Failed to fetch projects for menu", err);
+                listContainer.innerHTML = `<div style="padding: 8px 12px; color: #e53e3e; font-size: 13px;">${typeof t === 'function' ? t('Load failed') : 'Load failed'}</div>`;
+            }
+        };
+
         function clickGradioBtn(id) {
             let btn = document.getElementById(id);
             if (!btn) return;
@@ -822,22 +1311,26 @@ const IC_ICONS = {
             }
             btn.click();
         }
-        document.getElementById('ic_float_clear')?.addEventListener('click', () => {
-            if (confirm(typeof t === 'function' ? t("Are you sure you want to clear the mask?") : "Are you sure you want to clear the mask?")) {
+        window.ic_action_clear_mask = async function() {
+            if (await window.ic_confirm(typeof t === 'function' ? t("Are you sure you want to clear the mask?") : "Are you sure you want to clear the mask?")) {
                 if (typeof clearMask === 'function') clearMask();
                 if (typeof draw === 'function') draw();
             }
-        });
-        document.getElementById('ic_float_reset')?.addEventListener('click', async () => {
-            if (confirm(typeof t === 'function' ? t("Are you sure you want to reset the entire canvas?") : "Are you sure you want to reset the entire canvas?")) {
+        };
+        document.getElementById('ic_float_clear')?.addEventListener('click', window.ic_action_clear_mask);
+
+        window.ic_action_reset = async function() {
+            if (await window.ic_confirm(typeof t === 'function' ? t("Are you sure you want to reset the entire canvas?") : "Are you sure you want to reset the entire canvas?")) {
                 try {
                     const res = await fetch('/infinite-canvas-api/canvas/reset', { method: 'POST' });
                     const data = await res.json();
                     if (window.ic_handle_payload) window.ic_handle_payload(data);
                 } catch (e) { console.error("Reset failed", e); }
             }
-        });
-        document.getElementById('ic_float_download')?.addEventListener('click', () => {
+        };
+        document.getElementById('ic_float_reset')?.addEventListener('click', window.ic_action_reset);
+
+        window.ic_action_download = function() {
             if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
                 const nameField = document.getElementById('ic-projects-name-input');
                 const projName = (nameField && nameField.value.trim() !== '') ? encodeURIComponent(nameField.value.trim()) : 'canvas';
@@ -849,39 +1342,49 @@ const IC_ICONS = {
                 a.click();
                 document.body.removeChild(a);
             }
-        });
+        };
+        document.getElementById('ic_float_download')?.addEventListener('click', window.ic_action_download);
         const floatCopyBtn = document.getElementById('ic_float_copy');
+        window.ic_action_copy = function() {
+            if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
+                const originalText = floatCopyBtn ? floatCopyBtn.innerText : "Copy Canvas";
+                if (floatCopyBtn) floatCopyBtn.innerText = "Copying...";
+                fetch('/infinite-canvas-api/download')
+                    .then(res => res.blob())
+                    .then(blob => {
+                        if (blob) {
+                            const item = new ClipboardItem({ 'image/png': blob });
+                            navigator.clipboard.write([item]).then(() => {
+                                if (floatCopyBtn) floatCopyBtn.innerText = typeof t === 'function' ? t('Copied!') : 'Copied!';
+                                if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t('Copied to clipboard!') : 'Copied to clipboard!', 2000, 140);
+                                setTimeout(() => {
+                                    if (floatCopyBtn) floatCopyBtn.innerText = originalText;
+                                }, 2000);
+                            }).catch(e => {
+                                console.error('Copy failed:', e);
+                                if (floatCopyBtn) floatCopyBtn.innerText = originalText;
+                            });
+                        }
+                    }).catch(e => {
+                        console.error('Fetch failed:', e);
+                        if (floatCopyBtn) floatCopyBtn.innerText = originalText;
+                    });
+            }
+        };
+
         if (floatCopyBtn) {
-            floatCopyBtn.addEventListener('click', () => {
-                if (window.ic_tiles && Object.keys(window.ic_tiles).length > 0) {
-                    const originalText = floatCopyBtn.innerText;
-                    floatCopyBtn.innerText = "Copying...";
-                    fetch('/infinite-canvas-api/download')
-                        .then(res => res.blob())
-                        .then(blob => {
-                            if (blob) {
-                                const item = new ClipboardItem({ 'image/png': blob });
-                                navigator.clipboard.write([item]).then(() => {
-                                    floatCopyBtn.innerText = typeof t === 'function' ? t('Copied!') : 'Copied!';
-                                    setTimeout(() => {
-                                        floatCopyBtn.innerText = originalText;
-                                    }, 2000);
-                                }).catch(e => {
-                                    console.error('Copy failed:', e);
-                                    floatCopyBtn.innerText = originalText;
-                                });
-                            }
-                        }).catch(e => {
-                            console.error('Fetch failed:', e);
-                            floatCopyBtn.innerText = originalText;
-                        });
-                }
-            });
+            floatCopyBtn.addEventListener('click', window.ic_action_copy);
         }
         const floatUploadBtn = document.getElementById('ic_float_upload');
         const floatUploadInput = document.getElementById('ic_float_upload_input');
-        if (floatUploadBtn && floatUploadInput) {
-            floatUploadBtn.addEventListener('click', () => floatUploadInput.click());
+        window.ic_action_upload = function() {
+            if (floatUploadInput) floatUploadInput.click();
+        };
+
+        if (floatUploadBtn) {
+            floatUploadBtn.addEventListener('click', window.ic_action_upload);
+        }
+        if (floatUploadInput) {
             floatUploadInput.addEventListener('change', async (e) => {
                 if (!e.target.files || e.target.files.length === 0) return;
                 const file = e.target.files[0];
@@ -909,6 +1412,47 @@ const IC_ICONS = {
                 reader.readAsDataURL(file);
             });
         }
+        
+        window.ic_action_paste = async function() {
+            try {
+                if (!navigator.clipboard) {
+                    window.ic_alert(typeof t === 'function' ? t('Clipboard API not supported in your browser.') : 'Clipboard API not supported in your browser.');
+                    return;
+                }
+                const clipboardItems = await navigator.clipboard.read();
+                for (const clipboardItem of clipboardItems) {
+                    const imageTypes = clipboardItem.types.filter(type => type.startsWith('image/'));
+                    for (const imageType of imageTypes) {
+                        const blob = await clipboardItem.getType(imageType);
+                        if (window.lockProjectUI) window.lockProjectUI();
+                        if (window.icShowCustomToast) window.icShowCustomToast(typeof t === 'function' ? t("Uploading image...") : "Uploading image...", 0, 'white', 'ic-save-toast');
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                            try {
+                                const res = await fetch('/infinite-canvas-api/upload', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ image_b64: event.target.result })
+                                });
+                                const data = await res.json();
+                                if (window.ic_handle_payload) window.ic_handle_payload(data);
+                            } catch (err) {
+                                console.error("Upload failed:", err);
+                            } finally {
+                                if (window.unlockProjectUI) window.unlockProjectUI();
+                                if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+                            }
+                        };
+                        reader.readAsDataURL(blob);
+                        return; // Done
+                    }
+                }
+                window.ic_alert(typeof t === 'function' ? t('No image found in clipboard.') : 'No image found in clipboard.');
+            } catch (err) {
+                console.error("Paste failed:", err);
+                window.ic_alert(typeof t === 'function' ? t('Failed to read clipboard. Please ensure you have granted clipboard permissions.') : 'Failed to read clipboard. Please ensure you have granted clipboard permissions.');
+            }
+        };
         
         const brushSizeSlider = document.getElementById('ic_float_brush_size');
         const brushSizeVal = document.getElementById('ic_float_brush_size_val');
@@ -956,6 +1500,34 @@ const IC_ICONS = {
                 cropPopup.style.opacity = '0';
                 cropPopup.style.pointerEvents = 'none';
                 window.ic_autoCrop('white');
+            });
+        }
+
+        const floatResBtn = document.getElementById('ic_float_res_btn');
+        const resPopup = document.getElementById('ic_res_popup');
+        if (floatResBtn && resPopup) {
+            floatResBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (resPopup.style.opacity === '0') {
+                    resPopup.style.opacity = '1';
+                    resPopup.style.pointerEvents = 'auto';
+                    resPopup.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+                    const btnRect = floatResBtn.getBoundingClientRect();
+                    const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+                    const offsetLeft = (btnRect.left + btnRect.width / 2) - containerRect.left;
+                    resPopup.style.left = offsetLeft + 'px';
+                } else {
+                    resPopup.style.opacity = '0';
+                    resPopup.style.pointerEvents = 'none';
+                    resPopup.style.transform = 'translateX(-50%) translateY(10px) scale(0.95)';
+                }
+            });
+            document.addEventListener('click', (e) => {
+                if (!floatResBtn.contains(e.target) && !resPopup.contains(e.target)) {
+                    resPopup.style.opacity = '0';
+                    resPopup.style.pointerEvents = 'none';
+                    resPopup.style.transform = 'translateX(-50%) translateY(10px) scale(0.95)';
+                }
             });
         }
     }, 1000);
@@ -1164,3 +1736,55 @@ const IC_ICONS = {
     window.getAutoScale = function() {
         return window.ic_auto_scale_state;
     };
+
+    window.ic_action_toggle_fullscreen = function() {
+        const container = document.getElementById('ic-container');
+        if (!container) return;
+        if (!document.fullscreenElement) {
+            if (container.requestFullscreen) {
+                container.requestFullscreen();
+            } else if (container.webkitRequestFullscreen) {
+                container.webkitRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        }
+    };
+
+    window.ic_action_open_standalone = function() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('ic-standalone', '1');
+        window.open(url.toString(), '_blank');
+    };
+
+    // Apply standalone mode if requested in URL
+    if (window.location.search.includes('ic-standalone=1')) {
+        const applyStandalone = () => {
+            const container = document.getElementById('ic-container');
+            if (container) {
+                // Move out of Gradio's tab system to ensure it's not hidden by display:none
+                if (container.parentElement !== document.body) {
+                    document.body.appendChild(container);
+                }
+                container.style.position = 'fixed';
+                container.style.top = '0';
+                container.style.left = '0';
+                container.style.width = '100vw';
+                container.style.height = '100vh';
+                container.style.zIndex = '999999';
+                container.style.margin = '0';
+                container.style.padding = '0';
+                container.style.borderRadius = '0';
+                container.style.border = 'none';
+                container.style.backgroundColor = 'var(--body-background-fill, #1e1e1e)';
+                document.body.style.overflow = 'hidden';
+            } else {
+                setTimeout(applyStandalone, 50);
+            }
+        };
+        applyStandalone();
+    }

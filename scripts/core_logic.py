@@ -432,16 +432,14 @@ class FinalizeStateStep(GenerationStep):
         result_img = ctx.get(GeneratedImage)
         if not result_img:
             return ctx
-            
-        blured = ctx.get(BluredEdgeMaskArr)
-        edge_fix_mask_img = Image.fromarray(blured) if blured is not None else None
+        
         
         cc = ctx.get(CanvasConfig)
         csr = ctx.get(CanvasSourceRect)
         paste_mask = ctx.get(PasteMask)
         prep = ctx.get(PreparedCanvas)
         
-        canvas_state.set_pending_result(result_img, prep['canvas_source_rect'], paste_mask, cc.downscale_algo, edge_fix_mask=edge_fix_mask_img)
+        canvas_state.set_pending_result(result_img, prep['canvas_source_rect'], paste_mask, cc.downscale_algo)
         
         def to_b64(img):
             buffered = BytesIO()
@@ -450,7 +448,6 @@ class FinalizeStateStep(GenerationStep):
             
         patch_b64 = to_b64(canvas_state.pending_data['patch'])
         mask_b64 = to_b64(canvas_state.pending_data['mask_rgba'])
-        edge_mask_b64 = to_b64(canvas_state.pending_data['edge_mask_rgba']) if 'edge_mask_rgba' in canvas_state.pending_data else None
         
         payload = canvas_state.get_tiles_payload()
         payload["type"] = "preview"
@@ -463,8 +460,6 @@ class FinalizeStateStep(GenerationStep):
             "rect_x": prep['canvas_source_rect']['x'],
             "rect_y": prep['canvas_source_rect']['y']
         }
-        if edge_mask_b64:
-            payload["edge_mask"] = edge_mask_b64
 
         # Surface the seed Forge actually used so the frontend can offer a
         # "reuse seed" action (re-applies this value to the seed input).

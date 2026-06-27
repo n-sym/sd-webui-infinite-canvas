@@ -5,11 +5,12 @@
     const floatingToolbar = document.getElementById('ic-floating-toolbar');
     if (floatingToolbar) {
         floatingToolbar.addEventListener('mouseenter', () => {
-            canvas.dispatchEvent(new MouseEvent('mouseup'));
+            canvas.dispatchEvent(new PointerEvent('pointerup'));
         });
     }
     
-    canvas.addEventListener('mousedown', (e) => {
+    canvas.addEventListener('pointerdown', (e) => {
+        canvas.setPointerCapture(e.pointerId);
         if (e.button === 1 || e.button === 2) e.preventDefault();
         
         const rect = canvas.getBoundingClientRect();
@@ -154,8 +155,9 @@
         }
     });
     
-    canvas.addEventListener('mousemove', (e) => {
+    canvas.addEventListener('pointermove', (e) => {
         const rect = canvas.getBoundingClientRect();
+        
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
         const w = screenToWorld(sx, sy);
@@ -169,6 +171,7 @@
             canvas.style.cursor = 'crosshair';
         }
         
+        // For dragging, use the predicted coordinates (sx, sy, w)
         if (isDraggingCanvas) {
             offsetX = sx - dragStartX;
             offsetY = sy - dragStartY;
@@ -178,18 +181,11 @@
             const cx = sourceRect.x + sourceRect.w / 2;
             const cy = sourceRect.y + sourceRect.h / 2;
             let angle = Math.atan2(w.y - cy, w.x - cx);
-            // Snap to 0 or PI if close (within ~2.8 degrees)
-            if (Math.abs(angle) < 0.05) {
-                angle = 0;
-            } else if (Math.abs(angle - Math.PI) < 0.05) {
-                angle = Math.PI;
-            } else if (Math.abs(angle + Math.PI) < 0.05) {
-                angle = -Math.PI;
-            } else if (Math.abs(angle - Math.PI / 2) < 0.05) {
-                angle = Math.PI / 2;
-            } else if (Math.abs(angle + Math.PI / 2) < 0.05) {
-                angle = -Math.PI / 2;
-            }
+            if (Math.abs(angle) < 0.05) angle = 0;
+            else if (Math.abs(angle - Math.PI) < 0.05) angle = Math.PI;
+            else if (Math.abs(angle + Math.PI) < 0.05) angle = -Math.PI;
+            else if (Math.abs(angle - Math.PI / 2) < 0.05) angle = Math.PI / 2;
+            else if (Math.abs(angle + Math.PI / 2) < 0.05) angle = -Math.PI / 2;
             sourceRect.angle = angle;
             draw();
         } else if (isDraggingSource) {
@@ -229,7 +225,10 @@
         }
     });
     
-    canvas.addEventListener('mouseup', (e) => {
+    canvas.addEventListener('pointerup', (e) => {
+        if (canvas.hasPointerCapture(e.pointerId)) {
+            canvas.releasePointerCapture(e.pointerId);
+        }
         isDraggingCanvas = false;
         isDraggingSource = false;
         isRotatingSource = false;
@@ -289,7 +288,15 @@
         draw();
     });
     
+    let wheelTimeout = null;
     canvas.addEventListener('wheel', (e) => {
+        window.ic_isWheeling = true;
+        clearTimeout(wheelTimeout);
+        wheelTimeout = setTimeout(() => {
+            window.ic_isWheeling = false;
+            draw();
+        }, 150);
+        
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;

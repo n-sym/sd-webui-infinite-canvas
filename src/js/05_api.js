@@ -79,9 +79,9 @@
             const toast = document.getElementById('ic-progress-toast');
             if (toast && !window.exist_pending_generation) toast.style.display = 'none';
             
-            if (data.error) {
-                console.error("Generate error:", data.error);
-                alert("Error: " + data.error);
+            if (data.status === 'error') {
+                console.error("[Infinite Canvas] Generate error:", data.error);
+                window.ic_alert("Error: " + data.error);
                 return;
             }
             
@@ -101,10 +101,10 @@
                 }
             }
         } catch (e) {
-            console.error("Failed to generate:", e);
+            console.error("[Infinite Canvas] Generate failed:", e);
             const toast = document.getElementById('ic-progress-toast');
             if (toast) toast.style.display = 'none';
-            alert("Failed to generate: " + e.message);
+            window.ic_alert("Failed to generate: " + e.message);
         } finally {
             // Generate/Interrupt are mutually exclusive. The generation has
             // returned, but it may have PAUSED on a dynamic_dialog (prompt
@@ -205,8 +205,7 @@
                         if (window.ic_is_loading_or_saving) return;
                         window.lockProjectUI();
                         
-                        const visualNameInput = document.getElementById('ic-projects-name-input');
-                        if (visualNameInput) visualNameInput.value = p.name;
+                        if (window.ic_set_project_name) window.ic_set_project_name(p.name);
                         
                         if (window.closeProjectsModalWithAnimation) window.closeProjectsModalWithAnimation();
                         else projectsModal.style.display = 'none';
@@ -289,49 +288,54 @@
         if (btn) btn.classList.remove('disabled-state');
     };
     
+
+    window.ic_trigger_save_project = async function() {
+        if (window.ic_is_loading_or_saving) return;
+        window.lockProjectUI();
+
+        const targetName = window.ic_get_project_name ? window.ic_get_project_name() : 'project';
+
+        const payload = {
+            viewport: {
+                scale: scale,
+                offsetX: offsetX,
+                offsetY: offsetY,
+                sourceRect: sourceRect,
+                targetRect: targetRect
+            },
+            mask: maskDataCanvas.toDataURL('image/png')
+        };
+
+        try {
+            const res = await fetch('/infinite-canvas-api/projects/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_name: targetName,
+                    payload_json: JSON.stringify(payload)
+                })
+            });
+            const data = await res.json();
+            const listContainer = document.getElementById('ic-menu-projects-list');
+            if (listContainer) listContainer.removeAttribute('data-loaded');
+            if (window.ic_handle_payload) window.ic_handle_payload(data);
+        } catch (e) {
+            console.error("Save project error", e);
+            if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
+        } finally {
+            if (window.unlockProjectUI) window.unlockProjectUI();
+        }
+    };
+
     const saveProjectBtn = document.getElementById('ic-projects-save-btn');
     if (saveProjectBtn) {
         saveProjectBtn.addEventListener('click', async () => {
-            if (window.ic_is_loading_or_saving) return;
-            window.lockProjectUI();
-
-            const nameField = document.getElementById('ic-projects-name-input');
-            const targetName = nameField ? nameField.value : 'project';
-
-            const payload = {
-                viewport: {
-                    scale: scale,
-                    offsetX: offsetX,
-                    offsetY: offsetY,
-                    sourceRect: sourceRect,
-                    targetRect: targetRect
-                },
-                mask: maskDataCanvas.toDataURL('image/png')
-            };
-
-            // The "Saving..."/"Saved!" toasts are now driven by WS save:saving /
-            // save:done frames from core_logic.api_save_project. We only handle
-            // the request/response here and clean up on network failure.
-            try {
-                const res = await fetch('/infinite-canvas-api/projects/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_name: targetName,
-                        payload_json: JSON.stringify(payload)
-                    })
-                });
-                const data = await res.json();
-                if (window.ic_handle_payload) window.ic_handle_payload(data);
-            } catch (e) {
-                console.error("Save project error", e);
-                if (typeof icHideToast === 'function') icHideToast('ic-save-toast');
-            } finally {
-                if (window.unlockProjectUI) window.unlockProjectUI();
-            }
-
+            await window.ic_trigger_save_project();
             if (window.closeProjectsModalWithAnimation) window.closeProjectsModalWithAnimation();
-            else projectsModal.style.display = 'none';
+            else {
+                const pm = document.getElementById('ic-projects-modal');
+                if (pm) pm.style.display = 'none';
+            }
         });
     }
     
@@ -385,20 +389,8 @@
     
     const autosaveBtn = document.getElementById('ic_float_autosave');
     if (autosaveBtn) {
-        autosaveBtn.addEventListener('click', async () => {
-            window.ic_autosave_enabled = !window.ic_autosave_enabled;
-            if (window.ic_autosave_enabled) {
-                autosaveBtn.classList.add('primary');
-            } else {
-                autosaveBtn.classList.remove('primary');
-            }
-            try {
-                await fetch('/infinite-canvas-api/projects/set_autosave', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: window.ic_autosave_enabled })
-                });
-            } catch(e) { console.error("Set autosave failed", e); }
+        autosaveBtn.addEventListener('click', () => {
+            if (window.ic_action_toggle_autosave) window.ic_action_toggle_autosave();
         });
     }
     
@@ -595,8 +587,7 @@
     // Start it automatically on load if enabled (defaults to true)
     setTimeout(() => {
         window.ic_autosave_enabled = true;
-        const autosaveBtn = document.getElementById('ic_float_autosave');
-        if (autosaveBtn) autosaveBtn.classList.add('primary');
+        if (window.ic_update_autosave_ui) window.ic_update_autosave_ui();
         window.icStartAutosavePoller();
     }, 2000);
 

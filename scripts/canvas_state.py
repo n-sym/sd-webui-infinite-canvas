@@ -629,7 +629,7 @@ class CanvasState:
             }
         }
 
-    def set_pending_result(self, result_image, canvas_source_rect, mask, downscale_algo="Bicubic", edge_fix_mask=None):
+    def set_pending_result(self, result_image, canvas_source_rect, mask, downscale_algo="Bicubic"):
         """
         Stores the generated result and mask instead of pasting immediately.
         """
@@ -648,12 +648,6 @@ class CanvasState:
             'mask_rgba': rgba_mask,
             'rect': canvas_source_rect
         }
-        
-        if edge_fix_mask is not None:
-            edge_fix_mask_resized = (edge_fix_mask.resize((sw, sh), Image.BILINEAR) if edge_fix_mask.size != (sw, sh) else edge_fix_mask).convert("L")
-            rgba_edge_mask = Image.new("RGBA", edge_fix_mask_resized.size, (255, 255, 255, 0))
-            rgba_edge_mask.putalpha(edge_fix_mask_resized)
-            pending_data['edge_mask_rgba'] = rgba_edge_mask
             
         self.pending_data = pending_data
         return self.pending_data

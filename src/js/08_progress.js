@@ -16,7 +16,7 @@ function icInitToastWrapper() {
     icToastWrapper.id = 'ic-toast-wrapper';
     icToastWrapper.style.cssText = `
         position: absolute;
-        top: 20px;
+        top: 56px;
         left: 20px;
         z-index: 2000;
         display: flex;
@@ -95,7 +95,7 @@ function icUpdateToastThemeForElement(toast, hue) {
         toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 80%, 65%)`;
     } else {
         toast.style.backgroundColor = `hsl(${hue}, 85%, 92%)`;
-        toast.style.color = `hsl(${hue}, 85%, 25%)`;
+        toast.style.color = `#333333`;
         toast.style.border = `1px solid hsla(${hue}, 85%, 75%, 0.8)`;
         toast.querySelector('.ic-toast-bar').style.backgroundColor = `hsl(${hue}, 80%, 45%)`;
     }

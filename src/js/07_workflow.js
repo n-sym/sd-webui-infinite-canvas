@@ -10,7 +10,7 @@ workflowStyle.textContent = `
         transition: all 0.2s ease;
         /* Default to Light Mode (Cute Pastel) */
         background-color: hsl(var(--node-hue), 85%, 92%);
-        color: hsl(var(--node-hue), 85%, 25%);
+        color: var(--body-text-color, #333);
         --ic-border-color: hsla(var(--node-hue), 85%, 70%, 0.8);
         --ic-glow-color: hsla(var(--node-hue), 85%, 98%, 0.9);
         box-shadow: inset 0 0 5px rgba(255,255,255,0.5), 0 1px 3px rgba(0,0,0,0.05);
@@ -19,7 +19,7 @@ workflowStyle.textContent = `
     /* Dark Mode */
     .dark .ic-pipeline-node {
         background-color: hsl(var(--node-hue), 45%, 22%);
-        color: #f0f0f0;
+        color: var(--body-text-color, #f0f0f0);
         --ic-border-color: hsla(var(--node-hue), 45%, 45%, 0.8);
         --ic-glow-color: hsla(var(--node-hue), 45%, 70%, 0.6);
         box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
@@ -97,13 +97,13 @@ workflowStyle.textContent = `
         user-select: none;
         font-weight: 600;
         font-size: 13px;
-        color: hsl(var(--node-hue), 85%, 25%);
+        color: var(--body-text-color, #333);
         padding: 6px 8px;
         margin: -6px -8px;
         border-radius: 8px;
     }
     .dark .ic-sidebar-plugin-header {
-        color: hsl(var(--node-hue), 45%, 80%);
+        color: var(--body-text-color, #f0f0f0);
     }
     .ic-sidebar-plugin-chevron {
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -476,6 +476,21 @@ async function updateWorkflowUI(data, container) {
     if (searchInput && searchInput.value) {
         searchInput.dispatchEvent(new Event('input'));
     }
+
+    // Sync global Auto Scale UI state
+    if (stepParams['parse_input'] && stepParams['parse_input']['auto_scale'] !== undefined) {
+        window.ic_auto_scale_state = !!stepParams['parse_input']['auto_scale'];
+        const topBtn = document.getElementById('ic_auto_scale_btn');
+        if (topBtn) {
+            if (window.ic_auto_scale_state) { topBtn.classList.add('primary'); topBtn.classList.remove('secondary'); }
+            else { topBtn.classList.add('secondary'); topBtn.classList.remove('primary'); }
+        }
+        const floatBtn = document.getElementById('ic_float_autoscale');
+        if (floatBtn) {
+            if (window.ic_auto_scale_state) floatBtn.classList.add('primary');
+            else floatBtn.classList.remove('primary');
+        }
+    }
 }
 
 window.sendWorkflowUpdate = function(changedElem) {
@@ -547,10 +562,10 @@ function formatType(tObj) {
 function createNodeHtml(text, hue, hasError = false, errorText = "", typeSig = null) {
     let errorHtml = "";
     if (hasError) {
-        // Escape single quotes for the onclick alert
+        // Escape single quotes for the window.ic_alert
         const safeError = errorText.replace(/'/g, "\\'");
         errorHtml = `
-            <div title="${errorText}" style="position:absolute; right:8px; top:12px; width:16px; height:16px; background-color:#ef4444; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="alert('${safeError}'); event.stopPropagation();">
+            <div title="${errorText}" style="position:absolute; right:8px; top:12px; width:16px; height:16px; background-color:#ef4444; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="window.ic_alert('${safeError}'); event.stopPropagation();">
                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>

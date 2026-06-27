@@ -170,7 +170,7 @@ function initICSidebar() {
     const sidebarHTML = `
     <div id="ic-sidebar" class="fluent-panel" data-ic-state="collapsed" style="
         position: absolute;
-        top: 20px;
+        top: 56px;
         right: 20px;
         width: 340px;
         background: color-mix(in srgb, color-mix(in srgb, var(--body-background-fill, #1e1e1e) 95%, #000) 85%, transparent);
@@ -229,24 +229,197 @@ function initICSidebar() {
     const workflowHtml = document.getElementById('ic_workflow_html');
     const titleEl = document.getElementById('ic-sidebar-title');
 
+    // Drag state
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    let hasMoved = false;
+
+    // Remember collapsed position constraints
+    let collapsedState = {
+        left: 'auto',
+        right: '20px',
+        top: '56px'
+    };
+
+    sidebar.addEventListener('mousedown', (e) => {
+        if (sidebar.getAttribute('data-ic-state') === 'expanded') return;
+        
+        // Ignore interactive elements
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card')) {
+            return;
+        }
+
+        isDragging = true;
+        hasMoved = false;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+        const rect = sidebar.getBoundingClientRect();
+        
+        initialLeft = rect.left - containerRect.left;
+        initialTop = rect.top - containerRect.top;
+        
+        sidebar.style.transition = 'none'; // Disable transition during drag
+        sidebar.style.right = 'auto';
+        sidebar.style.bottom = 'auto';
+        sidebar.style.left = initialLeft + 'px';
+        sidebar.style.top = initialTop + 'px';
+        sidebar.style.transform = 'none';
+        
+        document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
+        
+        if (hasMoved) {
+            const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+            const rect = sidebar.getBoundingClientRect();
+            const toolbar = document.getElementById('ic-floating-toolbar');
+            const menuBar = document.getElementById('ic-menu-bar');
+            
+            let newLeft = initialLeft + dx;
+            let newTop = initialTop + dy;
+            
+            // Top bounds (menu bar + padding)
+            let minTop = 10;
+            if (menuBar) {
+                const mRect = menuBar.getBoundingClientRect();
+                minTop = (mRect.bottom - containerRect.top) + 10;
+            }
+            
+            // Bottom bounds (floating toolbar + padding)
+            let maxTop = containerRect.height - rect.height - 10;
+            if (toolbar) {
+                const tRect = toolbar.getBoundingClientRect();
+                const toolbarTopInContainer = tRect.top - containerRect.top;
+                maxTop = Math.min(maxTop, toolbarTopInContainer - rect.height - 10);
+            }
+            
+            // Constrain to container
+            newLeft = Math.max(10, Math.min(newLeft, containerRect.width - rect.width - 10));
+            newTop = Math.max(minTop, Math.min(newTop, maxTop));
+            
+            sidebar.style.left = newLeft + 'px';
+            sidebar.style.top = newTop + 'px';
+        }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        document.body.style.userSelect = '';
+        sidebar.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        
+        if (hasMoved) {
+            const containerRect = document.getElementById('ic-container').getBoundingClientRect();
+            const rect = sidebar.getBoundingClientRect();
+            
+            const isRightHalf = (rect.left + rect.width / 2) > (containerRect.width / 2);
+            collapsedState.top = (rect.top - containerRect.top) + 'px';
+            
+            if (isRightHalf) {
+                const rightDist = containerRect.width - (rect.left - containerRect.left + rect.width);
+                collapsedState.right = rightDist + 'px';
+                collapsedState.left = 'auto';
+                
+                sidebar.style.left = 'auto';
+                sidebar.style.right = rightDist + 'px';
+            } else {
+                const leftDist = rect.left - containerRect.left;
+                collapsedState.left = leftDist + 'px';
+                collapsedState.right = 'auto';
+                
+                sidebar.style.left = leftDist + 'px';
+                sidebar.style.right = 'auto';
+            }
+        }
+    });
+
+    sidebar.addEventListener('dblclick', (e) => {
+        if (sidebar.getAttribute('data-ic-state') === 'expanded') return;
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.ic-sidebar-plugin-card')) return;
+        
+        sidebar.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        sidebar.style.left = 'auto';
+        sidebar.style.top = '56px';
+        sidebar.style.right = '20px';
+        sidebar.style.bottom = 'auto';
+        sidebar.style.transform = 'none';
+        
+        collapsedState = { left: 'auto', right: '20px', top: '56px' };
+        
+        setTimeout(() => {
+            sidebar.style.transition = 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        }, 300);
+    });
+
     function setSidebarState(state) {
         const expanded = (state === 'expanded');
         sidebar.setAttribute('data-ic-state', state);
-        sidebar.style.width = expanded ? '550px' : '340px';
-
-        // Cap the sidebar's height so it never covers the floating toolbar:
-        // available = (toolbar's top) - (sidebar's top: 20px) - gap.
-        const toolbar = document.getElementById('ic-floating-toolbar');
+        
         const containerEl = document.getElementById('ic-container');
+        const toolbar = document.getElementById('ic-floating-toolbar');
+        const cRect = containerEl ? containerEl.getBoundingClientRect() : { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
+        
+        // Calculate max available height dodging toolbar
         let avail = 0;
+        let toolbarTopInContainer = cRect.height;
         if (toolbar && containerEl) {
-            const cRect = containerEl.getBoundingClientRect();
             const tRect = toolbar.getBoundingClientRect();
-            const toolbarTopInContainer = tRect.top - cRect.top;
-            avail = Math.max(120, toolbarTopInContainer - 20 /*sidebar top*/ - 12 /*gap*/);
-        } else {
-            avail = (containerEl ? containerEl.clientHeight : 800) - 100;
+            toolbarTopInContainer = tRect.top - cRect.top;
         }
+        
+        // Expansion geometry computation (Intelligent Anchoring)
+        if (expanded) {
+            const expandedWidth = 550;
+            
+            if (collapsedState.right !== 'auto') {
+                // Anchored to right. Expand leftward (right edge stays completely frozen).
+                const currentRight = parseFloat(collapsedState.right);
+                if (cRect.width - currentRight - expandedWidth < 10) {
+                    // Overflows left edge, shift right
+                    sidebar.style.right = Math.max(10, cRect.width - expandedWidth - 10) + 'px';
+                } else {
+                    sidebar.style.right = collapsedState.right;
+                }
+                sidebar.style.left = 'auto';
+            } else {
+                // Anchored to left. Expand rightward (left edge stays completely frozen).
+                const currentLeft = parseFloat(collapsedState.left);
+                if (currentLeft + expandedWidth > cRect.width - 20) {
+                    // Overflows right edge, shift left
+                    sidebar.style.left = Math.max(10, cRect.width - expandedWidth - 20) + 'px';
+                } else {
+                    sidebar.style.left = collapsedState.left;
+                }
+                sidebar.style.right = 'auto';
+            }
+            
+            sidebar.style.top = collapsedState.top;
+            sidebar.style.width = expandedWidth + 'px';
+            
+            const currentTop = parseFloat(collapsedState.top) || 56;
+            avail = Math.max(120, toolbarTopInContainer - currentTop - 12);
+        } else {
+            // Collapse
+            sidebar.style.width = '340px';
+            sidebar.style.left = collapsedState.left;
+            sidebar.style.right = collapsedState.right;
+            sidebar.style.top = collapsedState.top;
+            
+            const currentTop = parseFloat(collapsedState.top) || 56;
+            avail = Math.max(120, toolbarTopInContainer - currentTop - 12);
+        }
+
         sidebar.style.maxHeight = avail + 'px';
 
         // Toggle inner panels. #ic_workflow_html animates via max-height +

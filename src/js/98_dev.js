@@ -85,9 +85,9 @@ function createDevPanel() {
         try {
             const res = await fetch('/infinite-canvas-api/dev/rebuild-js', { method: 'POST' });
             const data = await res.json();
-            alert(data.status === 'success' ? data.message : 'Error: ' + data.error);
+            window.ic_alert(data.status === 'success' ? data.message : 'Error: ' + data.error);
         } catch (e) {
-            alert('Failed: ' + e);
+            window.ic_alert('Failed: ' + e);
         }
     });
     panel.appendChild(rebuildBtn);
@@ -96,9 +96,9 @@ function createDevPanel() {
         try {
             const res = await fetch('/infinite-canvas-api/dev/reload-python', { method: 'POST' });
             const data = await res.json();
-            alert(data.status === 'success' ? data.message : 'Error: ' + data.error);
+            window.ic_alert(data.status === 'success' ? data.message : 'Error: ' + data.error);
         } catch (e) {
-            alert('Failed: ' + e);
+            window.ic_alert('Failed: ' + e);
         }
     });
     panel.appendChild(reloadBtn);
@@ -191,11 +191,11 @@ ${graphStr}
                 newWindow.document.write(htmlContent);
                 newWindow.document.close();
             } else {
-                alert('Popup blocked. Please allow popups for this site to view the graph.');
+                window.ic_alert('Popup blocked. Please allow popups for this site to view the graph.');
             }
 
         } catch (e) {
-            alert('Dependency Graph Error: ' + e.message);
+            window.ic_alert('Dependency Graph Error: ' + e.message);
         }
     });
     panel.appendChild(graphBtn);

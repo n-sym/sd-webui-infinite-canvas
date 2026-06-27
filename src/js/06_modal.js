@@ -5,19 +5,14 @@
         let pendingUpdate = null;
         let pendingPatchImage = new Image();
         let pendingMaskImage = new Image();
-        let pendingEdgeMaskImage = new Image();
         let imagesLoaded = 0;
         let imagesToLoad = 0;
-        let showEdgeMask = false;
         let featherRadius = 0;
         
         let cachedPatchCanvas = null;
         let lastPatchSource = null;
         let lastMaskSource = null;
         let lastFeatherRadius = -1;
-        
-        let cachedHighlightCanvas = null;
-        let lastEdgeMaskSource = null;
         
 
         
@@ -28,8 +23,7 @@
             featherSlider.addEventListener('input', (e) => {
                 featherRadius = parseInt(e.target.value);
                 featherValDisplay.innerText = featherRadius;
-                
-                // No hidden gradio input to update anymore
+                if (typeof drawModal === 'function') drawModal();
             });
         }
         window.ic_continue_generation = async function(session_id, result_data) {
@@ -97,21 +91,8 @@
         }
         pendingPatchImage.onload = onModalImageLoad;
         pendingMaskImage.onload = onModalImageLoad;
-        pendingEdgeMaskImage.onload = onModalImageLoad;
         
-        const toggleEdgeBtn = document.getElementById('ic-modal-toggle-edge');
-        if (toggleEdgeBtn) {
-            toggleEdgeBtn.addEventListener('click', () => {
-                showEdgeMask = !showEdgeMask;
-                if (showEdgeMask) {
-                    toggleEdgeBtn.style.background = '#2196F3'; // Blue when active
-                } else {
-                    toggleEdgeBtn.style.background = '#555'; // Grey when inactive
-                }
-                drawModal();
-            });
-        }
-        
+
         let previewScale = 1;
         let previewCenterX = 0;
         let previewCenterY = 0;
@@ -141,7 +122,19 @@
             }
             ctx.restore();
         }
-                function drawModal() {
+                let isModalDrawRafPending = false;
+        function drawModal() {
+            if (!modalVisible) return;
+            if (!isModalDrawRafPending) {
+                isModalDrawRafPending = true;
+                requestAnimationFrame(() => {
+                    isModalDrawRafPending = false;
+                    _drawModalImpl();
+                });
+            }
+        }
+        
+        function _drawModalImpl() {
             if (!modalVisible) return;
             
             ['old', 'new'].forEach(type => {
@@ -163,11 +156,9 @@
                 }
                 
                 mctx.imageSmoothingEnabled = true;
-                mctx.imageSmoothingQuality = 'high';
-                
-                // Solid background without checkerboard
-                mctx.fillStyle = '#222';
-                mctx.fillRect(0,0,modalCanvas.width,modalCanvas.height);
+                mctx.imageSmoothingQuality = 'low'; // Must be low/default, high forces CPU fallback for canvas-to-canvas drawImage
+                // Clear canvas to let CSS checkerboard show through
+                mctx.clearRect(0,0,modalCanvas.width,modalCanvas.height);
                 
                 let currentScale = previewScale;
                 let currentCenterX = previewCenterX;
@@ -179,6 +170,15 @@
                     currentCenterX = previewCenterX * t.scale + t.pad_left;
                     currentCenterY = previewCenterY * t.scale + t.pad_top;
                 }
+
+                // Sync CSS background grid to follow the camera (like main canvas)
+                const bgSize = 32 * currentScale;
+                const halfSize = 16 * currentScale;
+                const bgOffsetX = rect.width/2 - currentCenterX * currentScale;
+                const bgOffsetY = rect.height/2 - currentCenterY * currentScale;
+                modalCanvas.parentNode.style.backgroundSize = `${bgSize}px ${bgSize}px`;
+                modalCanvas.parentNode.style.backgroundPosition = `${bgOffsetX}px ${bgOffsetY}px, ${bgOffsetX + halfSize}px ${bgOffsetY + halfSize}px`;
+
                 
                 if (type === 'old') {
                     if (window.ic_tiles) {
@@ -188,12 +188,21 @@
                         mctx.scale(currentScale, currentScale);
                         mctx.translate(-currentCenterX, -currentCenterY);
                         
-                        const TILE_SIZE = 1024;
-                        for (const key in window.ic_tiles) {
-                            const [tx, ty] = key.split(',').map(Number);
-                            const tileImg = window.ic_tiles[key];
-                            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-                                mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                        const visibleWorldLeft = currentCenterX - (rect.width/2) / currentScale;
+                        const visibleWorldRight = currentCenterX + (rect.width/2) / currentScale;
+                        const visibleWorldTop = currentCenterY - (rect.height/2) / currentScale;
+                        const visibleWorldBottom = currentCenterY + (rect.height/2) / currentScale;
+
+                        if (typeof ic_drawTiles === 'function') {
+                            ic_drawTiles(mctx, visibleWorldLeft, visibleWorldTop, visibleWorldRight, visibleWorldBottom, currentScale);
+                        } else {
+                            const TILE_SIZE = 1024;
+                            for (const key in window.ic_tiles) {
+                                const [tx, ty] = key.split(',').map(Number);
+                                const tileImg = window.ic_tiles[key];
+                                if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                                    mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                                }
                             }
                         }
                         
@@ -222,12 +231,21 @@
                         mctx.scale(currentScale, currentScale);
                         mctx.translate(-currentCenterX, -currentCenterY);
                         
-                        const TILE_SIZE = 1024;
-                        for (const key in window.ic_tiles) {
-                            const [tx, ty] = key.split(',').map(Number);
-                            const tileImg = window.ic_tiles[key];
-                            if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
-                                mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                        const visibleWorldLeft = currentCenterX - (rect.width/2) / currentScale;
+                        const visibleWorldRight = currentCenterX + (rect.width/2) / currentScale;
+                        const visibleWorldTop = currentCenterY - (rect.height/2) / currentScale;
+                        const visibleWorldBottom = currentCenterY + (rect.height/2) / currentScale;
+
+                        if (typeof ic_drawTiles === 'function') {
+                            ic_drawTiles(mctx, visibleWorldLeft, visibleWorldTop, visibleWorldRight, visibleWorldBottom, currentScale);
+                        } else {
+                            const TILE_SIZE = 1024;
+                            for (const key in window.ic_tiles) {
+                                const [tx, ty] = key.split(',').map(Number);
+                                const tileImg = window.ic_tiles[key];
+                                if (tileImg && tileImg.complete && tileImg.naturalWidth > 0) {
+                                    mctx.drawImage(tileImg, tx * TILE_SIZE, ty * TILE_SIZE);
+                                }
                             }
                         }
                         
@@ -256,44 +274,24 @@
                             const ry = t.rect_y;
                             
                             mctx.save();
-                            const cx = rx + pendingPatchImage.width / 2;
-                            const cy = ry + pendingPatchImage.height / 2;
+                            const patchWorldWidth = pendingPatchImage.width;
+                            const patchWorldHeight = pendingPatchImage.height;
+                            const cx = rx + patchWorldWidth / 2;
+                            const cy = ry + patchWorldHeight / 2;
                             mctx.translate(cx, cy);
                             mctx.rotate(sourceRect.angle || 0);
                             
                             mctx.drawImage(cachedPatchCanvas, -pendingPatchImage.width / 2, -pendingPatchImage.height / 2);
                             
-                            if (showEdgeMask && pendingEdgeMaskImage.complete && pendingEdgeMaskImage.naturalWidth > 0) {
-                                if (!cachedHighlightCanvas || lastEdgeMaskSource !== pendingEdgeMaskImage.src) {
-                                    cachedHighlightCanvas = document.createElement('canvas');
-                                    cachedHighlightCanvas.width = pendingEdgeMaskImage.width;
-                                    cachedHighlightCanvas.height = pendingEdgeMaskImage.height;
-                                    const hctx = cachedHighlightCanvas.getContext('2d');
-                                    hctx.drawImage(pendingEdgeMaskImage, 0, 0);
-                                    hctx.globalCompositeOperation = 'source-in';
-                                    hctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-                                    hctx.fillRect(0, 0, cachedHighlightCanvas.width, cachedHighlightCanvas.height);
-                                    lastEdgeMaskSource = pendingEdgeMaskImage.src;
-                                }
-                                
-                                mctx.save();
-                                const ecx = rx + pendingEdgeMaskImage.width / 2;
-                                const ecy = ry + pendingEdgeMaskImage.height / 2;
-                                mctx.translate(ecx, ecy);
-                                mctx.rotate(sourceRect.angle || 0);
-                                mctx.drawImage(cachedHighlightCanvas, -pendingEdgeMaskImage.width / 2, -pendingEdgeMaskImage.height / 2);
-                                mctx.restore();
-                            }
-                            
                             // Re-use drawBlueBox logic but adjusted for center coordinates
                             mctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
-                            mctx.lineWidth = 2 / currentScale;
+                            mctx.lineWidth = (2 / currentScale); // Adjust line width for the scale
                             const genSize = typeof getGenSize === 'function' ? getGenSize() : {w: 1024, h: 1024};
                             const currentAngle = sourceRect.angle || 0;
                             if (Math.abs(pendingPatchImage.width - genSize.w) < 1 && Math.abs(pendingPatchImage.height - genSize.h) < 1 && Math.abs(currentAngle) < 0.001) {
                                 mctx.setLineDash([]);
                             } else {
-                                mctx.setLineDash([5 / currentScale, 5 / currentScale]);
+                                mctx.setLineDash([(5 / currentScale), (5 / currentScale)]);
                             }
                             mctx.strokeRect(-pendingPatchImage.width / 2, -pendingPatchImage.height / 2, pendingPatchImage.width, pendingPatchImage.height);
                             
@@ -306,10 +304,12 @@
             });
         }
         
+        let modalWheelTimeout = null;
         ['old', 'new'].forEach(type => {
             const mc = document.getElementById(`ic-modal-canvas-${type}`);
             if(!mc) return;
-            mc.addEventListener('mousedown', (e) => {
+            mc.addEventListener('pointerdown', (e) => {
+                mc.setPointerCapture(e.pointerId);
                 modalDragging = true;
                 modalLastX = e.clientX;
                 modalLastY = e.clientY;
@@ -317,25 +317,33 @@
             mc.addEventListener('contextmenu', (e) => e.preventDefault());
             mc.addEventListener('wheel', (e) => {
                 if(!modalVisible) return;
+                
+                window.ic_isWheelingModal = true;
+                clearTimeout(modalWheelTimeout);
+                modalWheelTimeout = setTimeout(() => {
+                    window.ic_isWheelingModal = false;
+                    drawModal();
+                }, 150);
+                
                 e.preventDefault();
                 const rect = mc.getBoundingClientRect();
                 const sx = e.clientX - rect.left;
                 const sy = e.clientY - rect.top;
                 
-                const worldMouseX = previewCenterX + (sx - mc.width/2) / previewScale;
-                const worldMouseY = previewCenterY + (sy - mc.height/2) / previewScale;
+                const worldMouseX = previewCenterX + (sx - rect.width/2) / previewScale;
+                const worldMouseY = previewCenterY + (sy - rect.height/2) / previewScale;
                 
                 const zoomFactor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
                 previewScale *= zoomFactor;
                 
-                previewCenterX = worldMouseX - (sx - mc.width/2) / previewScale;
-                previewCenterY = worldMouseY - (sy - mc.height/2) / previewScale;
+                previewCenterX = worldMouseX - (sx - rect.width/2) / previewScale;
+                previewCenterY = worldMouseY - (sy - rect.height/2) / previewScale;
                 
                 drawModal();
             });
         });
         
-        window.addEventListener('mousemove', (e) => {
+        window.addEventListener('pointermove', (e) => {
             if (modalDragging && modalVisible) {
                 const dx = e.clientX - modalLastX;
                 const dy = e.clientY - modalLastY;
@@ -347,7 +355,13 @@
             }
         });
         
-        window.addEventListener('mouseup', () => { modalDragging = false; });
+        window.addEventListener('pointerup', (e) => { 
+            modalDragging = false; 
+            ['old', 'new'].forEach(type => {
+                const mc = document.getElementById(`ic-modal-canvas-${type}`);
+                if(mc && mc.hasPointerCapture(e.pointerId)) mc.releasePointerCapture(e.pointerId);
+            });
+        });
         
         modalBtnDiscard.addEventListener('click', async () => {
             modalVisible = false;
@@ -355,7 +369,6 @@
             pendingUpdate = null;
             pendingPatchImage.src = '';
             pendingMaskImage.src = '';
-            pendingEdgeMaskImage.src = '';
             try {
                 const res = await fetch('/infinite-canvas-api/discard', { method: 'POST' });
                 const data = await res.json();
@@ -394,7 +407,6 @@
             }
             pendingPatchImage.src = '';
             pendingMaskImage.src = '';
-            pendingEdgeMaskImage.src = '';
             try {
                 const res = await fetch('/infinite-canvas-api/apply', {
                     method: 'POST',
@@ -409,12 +421,7 @@
         });
         
         // Modal render loop — only schedules frames while modal is visible
-        const modalLoop = () => {
-            if(modalVisible) {
-                drawModal();
-                requestAnimationFrame(modalLoop);
-            }
-        };
+        // Removed continuous modalLoop, rely on event-driven drawModal() calls with internal RAF throttling
 
         window.ic_handle_payload = function(data) {
             try {
@@ -531,8 +538,9 @@
                         // Delay applying! Show Modal instead.
                         pendingUpdate = data;
                         previewScale = scale;
-                        previewCenterX = (canvas.width / 2 - offsetX) / scale;
-                        previewCenterY = (canvas.height / 2 - offsetY) / scale;
+                        const dpr = window.devicePixelRatio || 1;
+                        previewCenterX = ((canvas.width / dpr) / 2 - offsetX) / scale;
+                        previewCenterY = ((canvas.height / dpr) / 2 - offsetY) / scale;
 
                         // Cache the seed Forge actually sampled so the seed
                         // row's "reuse" button can replay it. When the user
@@ -562,8 +570,12 @@
                         }
                         
                         modalVisible = true;
-                        requestAnimationFrame(modalLoop);
                         modalOverlay.style.display = 'flex';
+                        // Wait for flexbox layout to resolve canvas dimensions before first draw
+                        requestAnimationFrame(() => {
+                            drawModal();
+                            setTimeout(drawModal, 50);
+                        });
                     } else if (data.type === 'dynamic_dialog') {
                         console.log("[Infinite Canvas] Received dynamic_dialog payload:", data);
                         const dynamicModal = document.getElementById('ic_dynamic_modal');
@@ -596,7 +608,7 @@
                     } else if (data.type === 'error') {
                         if (window.unlockProjectUI) window.unlockProjectUI();
                         console.error("[Infinite Canvas]", data.message);
-                        if (window.icShowCustomToast) window.icShowCustomToast(data.message, 3000, 'red', 'ic-error-toast');
+                        if (window.icShowCustomToast) window.icShowCustomToast(data.message, 3000, 0, 'ic-error-toast');
                     } else if (data.type === 'sam_result') {
                         if (data.mask) {
                             const img = new Image();
@@ -613,7 +625,7 @@
                         }
                     } else if (data.type === 'error') {
                         console.error("Backend Error:", data.message);
-                        alert(t("Error: ") + data.message);
+                        window.ic_alert(t("Error: ") + data.message);
                         document.body.style.cursor = 'default';
                         canvas.style.cursor = 'crosshair';
                     }

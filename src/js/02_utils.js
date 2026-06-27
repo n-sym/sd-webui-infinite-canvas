@@ -69,10 +69,10 @@
     
     const clearMaskBtn = document.getElementById('ic_clear_mask');
     if (clearMaskBtn) {
-        clearMaskBtn.addEventListener('click', (e) => {
+        clearMaskBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (confirm(t("Are you sure you want to clear the mask?"))) {
+            if (await window.ic_confirm(t("Are you sure you want to clear the mask?"))) {
                 clearMask();
                 draw();
             }
@@ -128,16 +128,22 @@
     }
 
     function updateMaskUndoRedoButtons() {
-        const undoBtn = document.getElementById('ic_float_mask_undo');
-        const redoBtn = document.getElementById('ic_float_mask_redo');
-        if (undoBtn) {
-            if (maskHistoryIndex > 0) undoBtn.classList.remove('disabled-state');
-            else undoBtn.classList.add('disabled-state');
-        }
-        if (redoBtn) {
-            if (maskHistoryIndex < maskHistory.length - 1) redoBtn.classList.remove('disabled-state');
-            else redoBtn.classList.add('disabled-state');
-        }
+        const undoBtns = [document.getElementById('ic_float_mask_undo'), document.getElementById('ic_menu_mask_undo')];
+        const redoBtns = [document.getElementById('ic_float_mask_redo'), document.getElementById('ic_menu_mask_redo')];
+        
+        undoBtns.forEach(btn => {
+            if (btn) {
+                if (maskHistoryIndex > 0) btn.classList.remove('disabled-state');
+                else btn.classList.add('disabled-state');
+            }
+        });
+        
+        redoBtns.forEach(btn => {
+            if (btn) {
+                if (maskHistoryIndex < maskHistory.length - 1) btn.classList.remove('disabled-state');
+                else btn.classList.add('disabled-state');
+            }
+        });
     }
 
     function resetMaskHistory() {
@@ -172,14 +178,17 @@
         return p.x >= rect.x && p.x <= rect.x + rect.w && p.y >= rect.y && p.y <= rect.y + rect.h;
     }
     
+    let cachedGenSizeEls = { wEl: null, hEl: null };
     function getGenSize() {
         // Width/Height are now ParseInputStep params (rendered by 07_workflow.js
         // as .ic-node-param number inputs under data-node-id="parse_input").
-        const wEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_width"]');
-        const hEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_height"]');
+        if (!cachedGenSizeEls.wEl || !document.body.contains(cachedGenSizeEls.wEl)) {
+            cachedGenSizeEls.wEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_width"]');
+            cachedGenSizeEls.hEl = document.querySelector('.ic-node-param[data-node-id="parse_input"][data-param-name="gen_height"]');
+        }
         return {
-            w: wEl ? parseFloat(wEl.value) : 1024,
-            h: hEl ? parseFloat(hEl.value) : 1024
+            w: cachedGenSizeEls.wEl ? parseFloat(cachedGenSizeEls.wEl.value) : 1024,
+            h: cachedGenSizeEls.hEl ? parseFloat(cachedGenSizeEls.hEl.value) : 1024
         };
     }
 
